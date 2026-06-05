@@ -1,0 +1,33 @@
+{
+  "name": "Meerya ESP32 Firmware",
+  "defaultTarget": "waveshare-audio-board-uac-camera",
+  "targets": [
+    {
+      "id": "waveshare-audio-board-uac-camera",
+      "name": "Waveshare ESP32-S3 Audio Board - UAC + Camera",
+      "chip": "esp32s3",
+      "baudRate": 460800,
+      "flashMode": "dio",
+      "flashFreq": "80m",
+      "flashSize": "16MB",
+      "description": "Composite USB audio and UVC camera build for the Waveshare ESP32-S3 Audio Board.",
+      "files": [
+        {
+          "address": 0,
+          "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
+          "label": "Bootloader"
+        },
+        {
+          "address": 32768,
+          "path": "firmware/waveshare-audio-board-uac-camera/partition-table.bin",
+          "label": "Partition table"
+        },
+        {
+          "address": 65536,
+          "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
+          "label": "Application"
+        }
+      ]
+    }
+  ]
+}
