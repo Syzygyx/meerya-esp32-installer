@@ -15,17 +15,23 @@
         {
           "address": 0,
           "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
-          "label": "Bootloader"
+          "label": "Bootloader",
+          "size": 20832,
+          "sha256": "fb30096cac4c422f11792e95ebd0629495bde3fe7941eae049e7aee31a115c1e"
         },
         {
           "address": 32768,
           "path": "firmware/waveshare-audio-board-uac-camera/partition-table.bin",
-          "label": "Partition table"
+          "label": "Partition table",
+          "size": 3072,
+          "sha256": "f97e13f412da7b176b9a403c0dd56acc1af82f53ec64f0d7be17594e94d8d1b9"
         },
         {
           "address": 65536,
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
-          "label": "Application"
+          "label": "Application",
+          "size": 1293296,
+          "sha256": "a33f12fe1cc0f8e63c649560f2c7f2313b3aa683e0b7410cc49f00eabaa7b020"
         }
       ]
     }
