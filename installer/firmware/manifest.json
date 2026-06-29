@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-06-29T22:37:07Z",
-  "sourceGitHead": "075e066",
+  "generatedAt": "2026-06-29T22:45:49Z",
+  "sourceGitHead": "5aaf760",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
@@ -12,7 +12,7 @@
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Composite USB audio and UVC camera build for the Waveshare ESP32-S3 Audio Board. Default microphone processing is tuned for Windows 11: +30 dB gain, 80 Hz high-pass, and low-pass disabled.",
+      "description": "Composite USB audio and UVC camera build for the Waveshare ESP32-S3 Audio Board. Default microphone processing is tuned for Windows 11: 0 dB gain, 80 Hz high-pass, and low-pass disabled.",
       "files": [
         {
           "address": 0,
@@ -33,7 +33,7 @@
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
           "size": 1308624,
-          "sha256": "ffe5e605579e3b477ae784aa2ddd3df4576178959991ffe5219e4c7b5465d524"
+          "sha256": "3c0d9e1a8abfef39abd4c1fdca9fa5d10639afef4692ff30a277f5172db51a81"
         }
       ]
     }
