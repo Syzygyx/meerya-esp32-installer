@@ -339,7 +339,7 @@
         <h2>Before Flashing</h2>
         <p><strong>Browser:</strong> Chrome or Edge on a secure page. Safari does not expose Web Serial.</p>
         <p><strong>Board mode:</strong> put the ESP32-S3 into ROM bootloader mode so it appears as the USB Serial/JTAG device, not as the Meerya UAC device.</p>
-        <p><strong>Build:</strong> the current bundled image is the Waveshare ESP32-S3 Audio Board UAC + UVC camera firmware.</p>
+        <p><strong>Build:</strong> the current bundled image is the Waveshare ESP32-S3 Audio Board UAC 48 kHz mono speakerphone firmware.</p>
       </aside>
     </div>
 
@@ -582,7 +582,7 @@
       appendLog("Flash complete. Resetting board...\n");
       await state.loader.after("hard_reset");
       setStatus("Complete", "done");
-      setProgress(100, "Firmware installed. The board will re-enumerate as Meerya USB audio/camera.");
+      setProgress(100, "Firmware installed. The board will re-enumerate as Meerya USB audio.");
       els.disconnectBtn.disabled = false;
     }
 

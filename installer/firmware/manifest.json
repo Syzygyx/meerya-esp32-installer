@@ -1,39 +1,47 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-06-29T22:45:49Z",
-  "sourceGitHead": "5aaf760",
+  "generatedAt": "2026-06-30T15:19:16Z",
+  "gitHead": "51f17da",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
       "id": "waveshare-audio-board-uac-camera",
-      "name": "Waveshare ESP32-S3 Audio Board - UAC + Camera",
+      "name": "Waveshare ESP32-S3 Audio Board - Windows UAC 48 kHz Audio",
       "chip": "esp32s3",
       "baudRate": 460800,
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Composite USB audio and UVC camera build for the Waveshare ESP32-S3 Audio Board. Default microphone processing is tuned for Windows 11: 0 dB gain, 80 Hz high-pass, and low-pass disabled.",
+      "description": "Windows-focused UAC audio build for the Waveshare ESP32-S3 Audio Board. Uses real 48 kHz mono microphone capture, mono speaker playback, fresh USB PID 0x8015, and short USB product/serial strings to avoid host descriptor cache reuse. Camera/video and HID control are disabled in this package to prioritize Windows audio enumeration.",
+      "status": "windows-audio-test",
       "files": [
         {
           "address": 0,
           "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "221b87f497dba59f3a6171e9309883a672a3cbcf6db60634d46d849b837f3537"
+          "sha256": "612560cde9cac2a209043fcc3d25bc41e8956352a51dcf04d8879f500f207d0d"
         },
         {
           "address": 32768,
           "path": "firmware/waveshare-audio-board-uac-camera/partition-table.bin",
           "label": "Partition table",
           "size": 3072,
-          "sha256": "f97e13f412da7b176b9a403c0dd56acc1af82f53ec64f0d7be17594e94d8d1b9"
+          "sha256": "88838bd8f9221557dbb85c08036f5e4bc0d4bbb2a585d9309b2dafc666ceee62"
         },
         {
-          "address": 65536,
+          "address": 61440,
+          "path": "firmware/waveshare-audio-board-uac-camera/ota_data_initial.bin",
+          "label": "OTA data",
+          "size": 8192,
+          "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+        },
+        {
+          "address": 131072,
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
-          "size": 1308624,
-          "sha256": "3c0d9e1a8abfef39abd4c1fdca9fa5d10639afef4692ff30a277f5172db51a81"
+          "size": 1346640,
+          "sha256": "83f612af5e4017330a986d21594d344698f9ec2b589e4aa5d493c2f2b5c64f57"
         }
       ]
     }
