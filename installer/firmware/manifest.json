@@ -1,19 +1,19 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-06-30T15:19:16Z",
-  "gitHead": "51f17da",
+  "generatedAt": "2026-06-30T17:05:24Z",
+  "gitHead": "59555dc",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
       "id": "waveshare-audio-board-uac-camera",
-      "name": "Waveshare ESP32-S3 Audio Board - Windows UAC 48 kHz Audio",
+      "name": "Waveshare ESP32-S3 Audio Board - Windows UAC2 Duplex Audio",
       "chip": "esp32s3",
       "baudRate": 460800,
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Windows-focused UAC audio build for the Waveshare ESP32-S3 Audio Board. Uses real 48 kHz mono microphone capture, mono speaker playback, fresh USB PID 0x8015, and short USB product/serial strings to avoid host descriptor cache reuse. Camera/video and HID control are disabled in this package to prioritize Windows audio enumeration.",
-      "status": "windows-audio-test",
+      "description": "Windows-focused UAC2 duplex audio build for the Waveshare ESP32-S3 Audio Board. Uses 48 kHz mono microphone capture, mono speaker playback, USB PID 0x8015, and short USB product/serial strings to avoid host descriptor cache reuse. Camera/video, CDC serial, and HID control are disabled in this package to prioritize Windows audio enumeration.",
+      "status": "windows-uac2-duplex-audio",
       "files": [
         {
           "address": 0,
@@ -41,7 +41,7 @@
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
           "size": 1346640,
-          "sha256": "83f612af5e4017330a986d21594d344698f9ec2b589e4aa5d493c2f2b5c64f57"
+          "sha256": "fef86e2c8a417f149be1b8c6a99fd1eb40f006adc2e208dba0a6b64dcd141f99"
         }
       ]
     }
