@@ -1,26 +1,26 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-06-30T17:05:24Z",
-  "gitHead": "59555dc",
+  "generatedAt": "2026-07-01T18:03:06Z",
+  "gitHead": "1a94c0fce5bf",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
       "id": "waveshare-audio-board-uac-camera",
-      "name": "Waveshare ESP32-S3 Audio Board - Windows UAC2 Duplex Audio",
+      "name": "Waveshare ESP32-S3 Audio Board - Windows UAC1 Duplex Audio",
       "chip": "esp32s3",
       "baudRate": 460800,
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Windows-focused UAC2 duplex audio build for the Waveshare ESP32-S3 Audio Board. Uses 48 kHz mono microphone capture, mono speaker playback, USB PID 0x8015, and short USB product/serial strings to avoid host descriptor cache reuse. Camera/video, CDC serial, and HID control are disabled in this package to prioritize Windows audio enumeration.",
-      "status": "windows-uac2-duplex-audio",
+      "description": "Validated Windows-focused UAC1 duplex audio build for the Waveshare ESP32-S3 Audio Board. Uses 48 kHz mono microphone capture, mono speaker playback, VID 0x303a/PID 0x801b, bcdDevice 0x0166, and a UAC1 descriptor that exposes Windows WASAPI speaker and microphone endpoints. Camera/video, CDC serial, and HID control are disabled in this package to prioritize Windows audio.",
+      "status": "windows-uac1-wasapi-duplex-audio",
       "files": [
         {
           "address": 0,
           "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "612560cde9cac2a209043fcc3d25bc41e8956352a51dcf04d8879f500f207d0d"
+          "sha256": "9d314e7f2cd5b7eb048d26d00f261ae2eddc41cebf6671e9d120bf3ced8fa0cc"
         },
         {
           "address": 32768,
@@ -40,8 +40,8 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
-          "size": 1346640,
-          "sha256": "fef86e2c8a417f149be1b8c6a99fd1eb40f006adc2e208dba0a6b64dcd141f99"
+          "size": 1356448,
+          "sha256": "2fe6c97ddde8e81c492d2654deba91901f3d5fb415c2ba7678367a9737d72009"
         }
       ]
     }
