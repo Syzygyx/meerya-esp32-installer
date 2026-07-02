@@ -880,6 +880,31 @@
       return readiness;
     }
 
+    async function autoPopulateAudioDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setAudioTestState("Audio devices unavailable");
+        return;
+      }
+      try {
+        await refreshAudioDevices();
+      } catch (error) {
+        setAudioPanelState("waiting");
+        setAudioTestState("Permission needed");
+        appendLog(`Audio device auto-detect waiting for permission: ${error.message}\n`);
+      }
+    }
+
+    function startAudioDeviceWatcher() {
+      if (!navigator.mediaDevices?.addEventListener) {
+        return;
+      }
+      let timer = null;
+      navigator.mediaDevices.addEventListener("devicechange", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => autoPopulateAudioDevices(), 500);
+      });
+    }
+
     function generateTestPcm(sampleRate = 48000, durationSeconds = 2.8) {
       const sampleCount = Math.round(sampleRate * durationSeconds);
       const pcm = new Float32Array(sampleCount);
@@ -1456,9 +1481,11 @@
     window.meeryaReceiveNearbyData = updateNativeNearby;
     requestNativeNearbySnapshot();
     setAudioTestControls();
+    startAudioDeviceWatcher();
 
     loadManifest()
       .then(() => {
+        autoPopulateAudioDevices();
         if (!("serial" in navigator)) {
           setStatus("Web Serial unavailable");
           setProgress(0, "Open this page in Chrome or Edge to flash firmware.");

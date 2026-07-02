@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-02T18:14:53Z",
-  "gitHead": "3a5cfe3d4845",
+  "generatedAt": "2026-07-02T18:18:08Z",
+  "gitHead": "b23e1ea63353",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
