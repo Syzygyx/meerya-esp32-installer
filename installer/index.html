@@ -1996,6 +1996,11 @@
         .join("");
     }
 
+    function withCacheBust(url, token = Date.now()) {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}t=${encodeURIComponent(String(token))}`;
+    }
+
     function renderTarget(target) {
       state.target = target;
       els.firmwareCommit.textContent = state.manifest?.gitHead || "unknown";
@@ -2021,7 +2026,7 @@
     }
 
     async function loadManifest() {
-      const response = await fetch("firmware/manifest.json", { cache: "no-store" });
+      const response = await fetch(withCacheBust("firmware/manifest.json"), { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Could not load firmware manifest: HTTP ${response.status}`);
       }
@@ -2070,7 +2075,8 @@
       const files = [];
       for (const file of target.files) {
         setProgress(0, `Loading ${file.label}...`);
-        const response = await fetch(file.path);
+        const cacheToken = state.manifest?.gitHead || file.sha256 || Date.now();
+        const response = await fetch(withCacheBust(file.path, cacheToken), { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Could not fetch ${file.path}: HTTP ${response.status}`);
         }
