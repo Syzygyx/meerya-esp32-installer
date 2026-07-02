@@ -493,6 +493,10 @@
       background: color-mix(in srgb, var(--bg) 85%, var(--ink));
     }
 
+    .audio-waveform canvas[data-tracks="3"] {
+      height: 210px;
+    }
+
     .audio-waveform canvas[data-tracks="4"] {
       height: 260px;
     }
@@ -1052,40 +1056,68 @@
       target.results.appendChild(item);
     }
 
-    function drawWaveformTrack(ctx, pcm, x, y, width, height, color) {
+    function spectrumForPlot(pcm, sampleRate, minHz = 100, maxHz = 3600, bins = 96) {
       if (!pcm.length) {
+        return [];
+      }
+      const active = activeSliceForMatch(pcm);
+      const step = Math.max(1, Math.floor(active.length / 24000));
+      const values = [];
+      let maxDb = -120;
+      for (let bin = 0; bin < bins; ++bin) {
+        const frequency = minHz + ((maxHz - minHz) * bin) / Math.max(1, bins - 1);
+        let real = 0;
+        let imag = 0;
+        let count = 0;
+        for (let i = 0; i < active.length; i += step) {
+          const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / Math.max(1, active.length - 1));
+          const sample = (active[i] || 0) * window;
+          const phase = (2 * Math.PI * frequency * i) / sampleRate;
+          real += sample * Math.cos(phase);
+          imag -= sample * Math.sin(phase);
+          count += 1;
+        }
+        const magnitude = (2 * Math.hypot(real, imag)) / Math.max(1, count);
+        const db = 20 * Math.log10(Math.max(magnitude, 1e-8));
+        maxDb = Math.max(maxDb, db);
+        values.push({ frequency, db });
+      }
+      return values.map((point) => ({
+        frequency: point.frequency,
+        value: Math.max(0, Math.min(1, (point.db - (maxDb - 54)) / 54)),
+      }));
+    }
+
+    function drawSpectrumTrack(ctx, pcm, sampleRate, x, y, width, height, color) {
+      const spectrum = spectrumForPlot(pcm, sampleRate);
+      if (spectrum.length === 0) {
         return;
       }
-      let peak = 0;
-      for (const sample of pcm) {
-        peak = Math.max(peak, Math.abs(sample));
+      ctx.strokeStyle = "rgba(20, 34, 48, 0.12)";
+      ctx.lineWidth = 1;
+      for (const ratio of [0.25, 0.5, 0.75]) {
+        const gy = y + height * ratio;
+        ctx.beginPath();
+        ctx.moveTo(x, gy);
+        ctx.lineTo(x + width, gy);
+        ctx.stroke();
       }
-      const scale = peak > 0 ? 1 / peak : 1;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      for (let px = 0; px < width; ++px) {
-        const start = Math.floor((px / width) * pcm.length);
-        const end = Math.max(start + 1, Math.floor(((px + 1) / width) * pcm.length));
-        let min = 1;
-        let max = -1;
-        for (let i = start; i < end; ++i) {
-          const sample = (pcm[i] || 0) * scale;
-          min = Math.min(min, sample);
-          max = Math.max(max, sample);
+      spectrum.forEach((point, index) => {
+        const px = x + (width * index) / Math.max(1, spectrum.length - 1);
+        const py = y + height - point.value * height * 0.88;
+        if (index === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
         }
-        const yMin = y + height * 0.5 - max * height * 0.45;
-        const yMax = y + height * 0.5 - min * height * 0.45;
-        if (px === 0) {
-          ctx.moveTo(x + px, yMin);
-        }
-        ctx.lineTo(x + px, yMin);
-        ctx.lineTo(x + px, yMax);
-      }
+      });
       ctx.stroke();
     }
 
-    function drawWaveformCanvas(canvas, referencePcm, capturePcm, topLabel = "expected", bottomLabel = "recorded") {
+    function drawWaveformCanvas(canvas, referencePcm, capturePcm, sampleRate, topLabel = "expected", bottomLabel = "recorded") {
       const rect = canvas.getBoundingClientRect();
       const pixelRatio = window.devicePixelRatio || 1;
       const width = Math.max(320, Math.floor(rect.width * pixelRatio));
@@ -1110,8 +1142,11 @@
       ctx.font = `${11 * pixelRatio}px system-ui, sans-serif`;
       ctx.fillText(topLabel, pad, pad + 11 * pixelRatio);
       ctx.fillText(bottomLabel, pad, pad * 2 + trackHeight + 11 * pixelRatio);
-      drawWaveformTrack(ctx, referencePcm, pad, pad, width - pad * 2, trackHeight, "#157f76");
-      drawWaveformTrack(ctx, capturePcm, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
+      drawSpectrumTrack(ctx, referencePcm, sampleRate, pad, pad, width - pad * 2, trackHeight, "#157f76");
+      drawSpectrumTrack(ctx, capturePcm, sampleRate, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
+      ctx.fillStyle = "rgba(20, 34, 48, 0.45)";
+      ctx.fillText("100 Hz", pad, height - 4 * pixelRatio);
+      ctx.fillText("3.6 kHz", width - pad - 44 * pixelRatio, height - 4 * pixelRatio);
     }
 
     function drawMultiWaveformCanvas(canvas, tracks) {
@@ -1139,8 +1174,11 @@
         ctx.stroke();
         ctx.fillStyle = track.color;
         ctx.fillText(track.label, pad, y + 11 * pixelRatio);
-        drawWaveformTrack(ctx, track.pcm, pad, y, width - pad * 2, trackHeight, track.color);
+        drawSpectrumTrack(ctx, track.pcm, track.sampleRate || 48000, pad, y, width - pad * 2, trackHeight, track.color);
       });
+      ctx.fillStyle = "rgba(20, 34, 48, 0.45)";
+      ctx.fillText("100 Hz", pad, height - 4 * pixelRatio);
+      ctx.fillText("3.6 kHz", width - pad - 44 * pixelRatio, height - 4 * pixelRatio);
     }
 
     function alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate) {
@@ -1172,14 +1210,14 @@
       const wrapper = document.createElement("div");
       wrapper.className = "audio-waveform";
       const header = document.createElement("span");
-      header.textContent = `${label}: aligned acoustic waveform, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", polarity corrected" : ""}`;
+      header.textContent = `${label}: FFT spectrum, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", polarity corrected" : ""}`;
       const canvas = document.createElement("canvas");
       canvas.height = 132;
       wrapper.append(header, canvas);
       item.appendChild(wrapper);
       target.results.appendChild(item);
       const aligned = alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate);
-      requestAnimationFrame(() => drawWaveformCanvas(canvas, aligned.reference, aligned.capture, topLabel, bottomLabel));
+      requestAnimationFrame(() => drawWaveformCanvas(canvas, aligned.reference, aligned.capture, sampleRate, topLabel, bottomLabel));
     }
 
     function addAudioMultiWaveformResult(column, label, tracks, ok) {
@@ -1372,7 +1410,7 @@
       });
     }
 
-    function generateTestPcm(sampleRate = 48000, durationSeconds = 2.8) {
+    function generateTestPcm(sampleRate = 48000, durationSeconds = 2.8, gain = 1.0) {
       const sampleCount = Math.round(sampleRate * durationSeconds);
       const pcm = new Float32Array(sampleCount);
       for (let i = 0; i < sampleCount; ++i) {
@@ -1380,7 +1418,7 @@
         const envelope = Math.min(1, t / 0.08, (durationSeconds - t) / 0.08);
         const chirpHz = 600 + 1200 * (t / durationSeconds);
         const marker = Math.sin(2 * Math.PI * 2400 * t) * (t > 0.35 && t < 0.55 ? 0.25 : 0);
-        pcm[i] = envelope * (0.42 * Math.sin(2 * Math.PI * chirpHz * t) + marker);
+        pcm[i] = gain * envelope * (0.42 * Math.sin(2 * Math.PI * chirpHz * t) + marker);
       }
       return { pcm, sampleRate };
     }
@@ -1653,6 +1691,7 @@
       clear = true,
       outputLabel = "output",
       inputLabel = "input",
+      playbackGain = 1.0,
     }) {
       const readiness = await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
@@ -1664,7 +1703,7 @@
       setAudioTestState(label);
       setAudioPanelState("running");
       setAudioColumnState(column, "running", "Running");
-      const { pcm, sampleRate } = generateTestPcm();
+      const { pcm, sampleRate } = generateTestPcm(48000, 2.8, playbackGain);
       const wav = wavBlobFromPcm(pcm, sampleRate);
       const countersBefore = await readFirmwareAudioRuntime();
       const capturePromise = capturePcmFromDevice(inputSelect.value, 4200);
@@ -1769,6 +1808,7 @@
           inputSelect: els.hostInputSelect,
           outputLabel: "meerya out",
           inputLabel: "computer in",
+          playbackGain: 0.2,
           clear: false,
         }));
       }
@@ -1786,10 +1826,10 @@
           "duplex",
           "Duplex endpoints",
           [
-            { label: "computer out", pcm: firstAligned.reference, color: "#157f76" },
-            { label: "computer in", pcm: secondAligned.capture, color: "#315fbd" },
-            { label: "meerya out", pcm: secondAligned.reference, color: "#8a5a1f" },
-            { label: "meerya in", pcm: firstAligned.capture, color: "#7a3eb1" },
+            { label: "computer out", pcm: firstAligned.reference, sampleRate: first.sampleRate, color: "#157f76" },
+            { label: "computer in", pcm: secondAligned.capture, sampleRate: second.sampleRate, color: "#315fbd" },
+            { label: "meerya out", pcm: secondAligned.reference, sampleRate: second.sampleRate, color: "#8a5a1f" },
+            { label: "meerya in", pcm: firstAligned.capture, sampleRate: first.sampleRate, color: "#7a3eb1" },
           ],
           allPassed,
         );
@@ -2224,6 +2264,7 @@
       inputSelect: els.hostInputSelect,
       outputLabel: "meerya out",
       inputLabel: "computer in",
+      playbackGain: 0.2,
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
