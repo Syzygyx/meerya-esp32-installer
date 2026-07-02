@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-01T20:47:44Z",
-  "gitHead": "cd3164b-local-windows-uac1-10ms-mic",
+  "generatedAt": "2026-07-02T00:51:46Z",
+  "gitHead": "195444d229f6",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
@@ -12,15 +12,15 @@
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Validated Windows-focused UAC1 duplex audio build for the Waveshare ESP32-S3 Audio Board. Uses 48 kHz mono microphone capture, mono speaker playback, VID 0x303a/PID 0x801d, bcdDevice 0x0171, a 10 ms / 960 byte USB microphone IN packet for Windows Voice Recorder compatibility, AEC echo cancellation enabled by default, and far-field beamforming disabled by default. Camera/video, CDC serial, and HID control are disabled in this package to prioritize Windows audio and force a fresh Windows descriptor cache.",
-      "status": "windows-uac1-48k-mono-voice-recorder-10ms-mic",
+      "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer firmware. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 10 ms USB microphone IN packets, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
+      "status": "ci-built-current-main",
       "files": [
         {
           "address": 0,
           "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "86bc740d74988bc95b91b524f5fd486055a528ec9deb4c13f579a02bd1771ef0"
+          "sha256": "5bba7be1ed5fd9ef7e479d628730a42d831c2f85fa6a5904a5067b57b1ce0bfa"
         },
         {
           "address": 32768,
@@ -40,8 +40,8 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
-          "size": 1355536,
-          "sha256": "a0249fa35137dc686fbf7f953434262c5786179d5abcbe44ba14abb5e31141a0"
+          "size": 1356768,
+          "sha256": "d9fd64a4644123c79f105131ae8b664b0667cad713763586012c38125544a8fd"
         }
       ]
     }
