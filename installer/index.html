@@ -358,6 +358,14 @@
       font-weight: 700;
     }
 
+    .audio-test-results button {
+      justify-self: end;
+      width: auto;
+      min-height: 34px;
+      padding: 6px 10px;
+      font-size: 0.85rem;
+    }
+
     .audio-test-results li[data-result="pass"] b {
       color: var(--ok);
     }
@@ -604,6 +612,7 @@
       loader: null,
       connected: false,
       meeryaAudioReady: false,
+      audioRecordingUrls: [],
     };
 
     const els = {
@@ -761,6 +770,8 @@
 
     function clearAudioResults() {
       els.audioTestResults.innerHTML = "";
+      state.audioRecordingUrls.forEach((url) => URL.revokeObjectURL(url));
+      state.audioRecordingUrls = [];
     }
 
     function addAudioResult(label, value, ok = null) {
@@ -768,6 +779,24 @@
       item.innerHTML = `<span>${label}</span><b>${value}</b>`;
       if (ok === true) item.dataset.result = "pass";
       if (ok === false) item.dataset.result = "fail";
+      els.audioTestResults.appendChild(item);
+    }
+
+    function addAudioPlaybackResult(label, blob) {
+      const item = document.createElement("li");
+      const url = URL.createObjectURL(blob);
+      state.audioRecordingUrls.push(url);
+      const text = document.createElement("span");
+      const button = document.createElement("button");
+      text.textContent = label;
+      button.type = "button";
+      button.textContent = "Play recording";
+      button.addEventListener("click", async () => {
+        const audio = new Audio(url);
+        audio.preload = "auto";
+        await audio.play();
+      });
+      item.append(text, button);
       els.audioTestResults.appendChild(item);
     }
 
@@ -968,12 +997,69 @@
       };
     }
 
-    async function runAudioPathTest({ label, outputSelect, inputSelect }) {
+    function resampleForMatch(pcm, stride = 8) {
+      const samples = new Float32Array(Math.floor(pcm.length / stride));
+      for (let i = 0; i < samples.length; ++i) {
+        let sum = 0;
+        for (let j = 0; j < stride; ++j) {
+          sum += pcm[i * stride + j] || 0;
+        }
+        samples[i] = sum / stride;
+      }
+      return samples;
+    }
+
+    function normalizeForMatch(pcm) {
+      let sum = 0;
+      for (const sample of pcm) sum += sample;
+      const mean = sum / Math.max(1, pcm.length);
+      let sumSq = 0;
+      const normalized = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; ++i) {
+        const sample = pcm[i] - mean;
+        normalized[i] = sample;
+        sumSq += sample * sample;
+      }
+      const scale = Math.sqrt(sumSq / Math.max(1, pcm.length)) || 1;
+      for (let i = 0; i < normalized.length; ++i) {
+        normalized[i] /= scale;
+      }
+      return normalized;
+    }
+
+    function compareWaveforms(referencePcm, capturePcm, sampleRate) {
+      const reference = normalizeForMatch(resampleForMatch(referencePcm));
+      const capture = normalizeForMatch(resampleForMatch(capturePcm));
+      const windowLength = Math.min(reference.length, capture.length);
+      const maxOffset = Math.max(0, capture.length - windowLength);
+      const step = 32;
+      let best = -1;
+      let bestOffset = 0;
+      for (let offset = 0; offset <= maxOffset; offset += step) {
+        let dot = 0;
+        for (let i = 0; i < windowLength; ++i) {
+          dot += reference[i] * capture[offset + i];
+        }
+        const score = dot / Math.max(1, windowLength);
+        if (score > best) {
+          best = score;
+          bestOffset = offset;
+        }
+      }
+      return {
+        score: Math.max(0, Math.min(1, best)),
+        lagMs: Math.round((bestOffset * 8 * 1000) / sampleRate),
+      };
+    }
+
+    async function runAudioPathTest({ label, outputSelect, inputSelect, clear = true }) {
       const readiness = await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running smoke tests.");
       }
-      clearAudioResults();
+      if (clear) {
+        clearAudioResults();
+      }
       setAudioTestState(label);
       setAudioPanelState("running");
       const { pcm, sampleRate } = generateTestPcm();
@@ -983,18 +1069,24 @@
       await playWavToDevice(wav, outputSelect.value);
       const capture = await capturePromise;
       const stats = analyzePcm(capture.pcm);
+      const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
+      const waveform = compareWaveforms(pcm, capture.pcm, capture.sampleRate);
       const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
       const peakDb = 20 * Math.log10(Math.max(stats.peak, 1e-6));
-      const pass = stats.rms > 0.006 && stats.peak > 0.04 && stats.clippedRatio < 0.01;
+      const waveformPass = waveform.score >= 0.16;
+      const levelPass = stats.rms > 0.006 && stats.peak > 0.04 && stats.clippedRatio < 0.01;
+      const pass = levelPass && waveformPass;
       addAudioResult(`${label} RMS`, `${rmsDb.toFixed(1)} dBFS`);
       addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`);
       addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`);
       addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3));
-      addAudioResult(`${label} result`, pass ? "audible capture" : "needs check", pass);
+      addAudioResult(`${label} waveform match`, `${Math.round(waveform.score * 100)}% / ${waveform.lagMs} ms`, waveformPass);
+      addAudioResult(`${label} result`, pass ? "matched recording" : "waveform mismatch", pass);
+      addAudioPlaybackResult(`${label} recording`, recording);
       setAudioPanelState(pass ? "pass" : "fail");
-      setAudioTestState(pass ? "Passed" : "Needs check");
-      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}%\n`);
-      return { pass, stats };
+      setAudioTestState(pass ? "Passed" : "Waveform mismatch");
+      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% lag=${waveform.lagMs}ms\n`);
+      return { pass, stats, waveform, recording };
     }
 
     async function maybeAutoRunAudioSmokeTest() {
@@ -1011,6 +1103,7 @@
         const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
         const hasHostMic = Boolean(els.hostInputSelect.value);
         const results = [];
+        clearAudioResults();
         setAudioPanelState("running");
         setAudioTestState("Running tests");
         if (hasHostSpeaker && hasMeeryaMic) {
@@ -1018,6 +1111,7 @@
             label: "Computer to Meerya mic",
             outputSelect: els.hostOutputSelect,
             inputSelect: els.meeryaInputSelect,
+            clear: false,
           }));
         }
         if (hasMeeryaSpeaker && hasHostMic) {
@@ -1025,11 +1119,12 @@
             label: "Meerya speaker to computer",
             outputSelect: els.meeryaOutputSelect,
             inputSelect: els.hostInputSelect,
+            clear: false,
           }));
         }
         const allPassed = results.length > 0 && results.every((result) => result.pass);
         setAudioPanelState(allPassed ? "pass" : "fail");
-        setAudioTestState(allPassed ? "Passed" : "Needs check");
+        setAudioTestState(allPassed ? "Passed" : "Waveform mismatch");
       } catch (error) {
         setAudioPanelState("fail");
         setAudioTestState("Manual permission needed");
