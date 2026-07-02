@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-02T18:19:26Z",
-  "gitHead": "d03e537e407a",
+  "generatedAt": "2026-07-02T18:22:38Z",
+  "gitHead": "b23e1ea63353",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
     {
@@ -20,7 +20,7 @@
           "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "30ce040f6d0d654321ee861b913d508e2a1e7352a20efbceebedb8b0d751092c"
+          "sha256": "a364583bae14474e32b0f666b4f62e0095014faceb6f52147e608e0abf919f03"
         },
         {
           "address": 32768,
@@ -41,7 +41,7 @@
           "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
           "label": "Application",
           "size": 1356768,
-          "sha256": "042fe84f44b38d05035882ab5bedeffb67d7e4cffab1b5fc514b685bfacfe01c"
+          "sha256": "4429825d95711f34e2788f203ace5f18a0df867516f788d7781e5e4dc221c59e"
         }
       ]
     }
