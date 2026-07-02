@@ -331,7 +331,7 @@
 
     .audio-test-actions {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -350,7 +350,20 @@
       grid-template-columns: 1fr auto;
       gap: 10px;
       border-top: 1px solid var(--line);
-      padding-top: 6px;
+      border-radius: 4px;
+      padding: 6px 8px 0;
+    }
+
+    .audio-test-results li[data-result="pass"] {
+      border-color: color-mix(in srgb, var(--ok) 50%, var(--line));
+      background: color-mix(in srgb, var(--ok) 12%, transparent);
+      color: color-mix(in srgb, var(--ok) 55%, var(--ink));
+    }
+
+    .audio-test-results li[data-result="fail"] {
+      border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+      background: color-mix(in srgb, var(--warn) 12%, transparent);
+      color: color-mix(in srgb, var(--warn) 65%, var(--ink));
     }
 
     .audio-test-results b {
@@ -542,6 +555,7 @@
             <button id="audioRefreshBtn">Refresh Devices</button>
             <button id="audioHostToMeeryaBtn" disabled>Computer → Meerya Mic</button>
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
+            <button id="audioDuplexBtn" disabled>Duplex Test</button>
           </div>
           <ul class="audio-test-results" id="audioTestResults"></ul>
         </div>
@@ -612,6 +626,8 @@
       loader: null,
       connected: false,
       meeryaAudioReady: false,
+      audioAutoRunCompleted: false,
+      audioAutoRunInProgress: false,
       audioRecordingUrls: [],
     };
 
@@ -643,6 +659,7 @@
       audioRefreshBtn: document.getElementById("audioRefreshBtn"),
       audioHostToMeeryaBtn: document.getElementById("audioHostToMeeryaBtn"),
       audioMeeryaToHostBtn: document.getElementById("audioMeeryaToHostBtn"),
+      audioDuplexBtn: document.getElementById("audioDuplexBtn"),
       terminal: document.getElementById("terminal"),
       nativePanel: document.getElementById("nativePanel"),
       nativeBridgeState: document.getElementById("nativeBridgeState"),
@@ -740,6 +757,7 @@
       const hasMeeryaDuplex = hasMeeryaInput && hasMeeryaOutput;
       els.audioHostToMeeryaBtn.disabled = !(hasMeeryaDuplex && hasHostOutput);
       els.audioMeeryaToHostBtn.disabled = !(hasMeeryaDuplex && hasHostInput);
+      els.audioDuplexBtn.disabled = !(hasMeeryaDuplex && hasHostOutput && hasHostInput);
     }
 
     function audioReadinessFromDevices(devices) {
@@ -880,13 +898,39 @@
       return readiness;
     }
 
+    function canRunFullAudioSuite(readiness) {
+      return Boolean(
+        readiness.hasMeeryaInput
+        && readiness.hasMeeryaOutput
+        && readiness.hasHostInput
+        && readiness.hasHostOutput
+      );
+    }
+
+    async function autoRunAudioSuiteIfReady(readiness, { force = false } = {}) {
+      if (!force && (state.audioAutoRunCompleted || state.audioAutoRunInProgress)) {
+        return;
+      }
+      if (!canRunFullAudioSuite(readiness)) {
+        return;
+      }
+      state.audioAutoRunInProgress = true;
+      try {
+        await runAudioDuplexTest({ clear: true, readiness });
+        state.audioAutoRunCompleted = true;
+      } finally {
+        state.audioAutoRunInProgress = false;
+      }
+    }
+
     async function autoPopulateAudioDevices() {
       if (!navigator.mediaDevices?.enumerateDevices) {
         setAudioTestState("Audio devices unavailable");
         return;
       }
       try {
-        await refreshAudioDevices();
+        const readiness = await refreshAudioDevices();
+        await autoRunAudioSuiteIfReady(readiness);
       } catch (error) {
         setAudioPanelState("waiting");
         setAudioTestState("Permission needed");
@@ -1135,38 +1179,53 @@
           appendLog("Audio smoke test waiting: Meerya is not visible as both audio input and output yet.\n");
           return;
         }
-        const hasMeeryaMic = Boolean(els.meeryaInputSelect.value);
-        const hasMeeryaSpeaker = Boolean(els.meeryaOutputSelect.value);
-        const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
-        const hasHostMic = Boolean(els.hostInputSelect.value);
-        const results = [];
-        clearAudioResults();
-        setAudioPanelState("running");
-        setAudioTestState("Running tests");
-        if (hasHostSpeaker && hasMeeryaMic) {
-          results.push(await runAudioPathTest({
-            label: "Computer to Meerya mic",
-            outputSelect: els.hostOutputSelect,
-            inputSelect: els.meeryaInputSelect,
-            clear: false,
-          }));
-        }
-        if (hasMeeryaSpeaker && hasHostMic) {
-          results.push(await runAudioPathTest({
-            label: "Meerya speaker to computer",
-            outputSelect: els.meeryaOutputSelect,
-            inputSelect: els.hostInputSelect,
-            clear: false,
-          }));
-        }
-        const allPassed = results.length > 0 && results.every((result) => result.pass);
-        setAudioPanelState(allPassed ? "pass" : "fail");
-        setAudioTestState(allPassed ? "Passed" : "Audio weak/noisy");
+        await autoRunAudioSuiteIfReady(readiness, { force: true });
       } catch (error) {
         setAudioPanelState("fail");
         setAudioTestState("Manual permission needed");
         appendLog(`Audio smoke test skipped: ${error.message}\n`);
       }
+    }
+
+    async function runAudioDuplexTest({ clear = true, readiness = null } = {}) {
+      readiness ??= await refreshAudioDevices();
+      if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
+        throw new Error("Meerya must appear as both an audio input and output before running the duplex test.");
+      }
+      const hasMeeryaMic = Boolean(els.meeryaInputSelect.value);
+      const hasMeeryaSpeaker = Boolean(els.meeryaOutputSelect.value);
+      const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
+      const hasHostMic = Boolean(els.hostInputSelect.value);
+      const results = [];
+      if (clear) {
+        clearAudioResults();
+      }
+      setAudioPanelState("running");
+      setAudioTestState("Running duplex test");
+      if (hasHostSpeaker && hasMeeryaMic) {
+        results.push(await runAudioPathTest({
+          label: "Computer to Meerya mic",
+          outputSelect: els.hostOutputSelect,
+          inputSelect: els.meeryaInputSelect,
+          clear: false,
+        }));
+      }
+      if (hasMeeryaSpeaker && hasHostMic) {
+        results.push(await runAudioPathTest({
+          label: "Meerya speaker to computer",
+          outputSelect: els.meeryaOutputSelect,
+          inputSelect: els.hostInputSelect,
+          clear: false,
+        }));
+      }
+      if (results.length === 0) {
+        throw new Error("No complete audio test path is available.");
+      }
+      const allPassed = results.length > 0 && results.every((result) => result.pass);
+      setAudioPanelState(allPassed ? "pass" : "fail");
+      setAudioTestState(allPassed ? "Passed" : "Audio weak/noisy");
+      appendLog(`Audio duplex test: ${results.length} path(s), result=${allPassed ? "pass" : "fail"}\n`);
+      return { pass: allPassed, results };
     }
 
     async function waitForMeeryaAudioDevices(timeoutMs = 30000) {
@@ -1419,6 +1478,7 @@
       setStatus("Testing", "ready");
       setProgress(100, "Firmware installed. Running post-flash test...");
       await runPostFlashTest(state.target);
+      state.audioAutoRunCompleted = false;
       await maybeAutoRunAudioSmokeTest();
       setStatus("Complete", "done");
       setProgress(100, "Firmware installed. Post-flash test finished.");
@@ -1485,6 +1545,7 @@
       outputSelect: els.meeryaOutputSelect,
       inputSelect: els.hostInputSelect,
     }).catch(handleError));
+    els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
     els.nativeStopBtn.addEventListener("click", () => window.MeeryaNative?.stopNearbyScan());
     els.nativeInvalidateBtn.addEventListener("click", () => window.MeeryaNative?.invalidateNearbySession());
