@@ -379,6 +379,54 @@
       gap: 10px;
     }
 
+    .audio-test-columns {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .audio-test-column {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--panel) 70%, var(--bg));
+    }
+
+    .audio-test-column[data-state="running"] {
+      border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+    }
+
+    .audio-test-column[data-state="pass"] {
+      border-color: color-mix(in srgb, var(--ok) 60%, var(--line));
+      background: color-mix(in srgb, var(--ok) 8%, var(--bg));
+    }
+
+    .audio-test-column[data-state="fail"] {
+      border-color: color-mix(in srgb, var(--warn) 70%, var(--line));
+      background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+    }
+
+    .audio-test-column-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .audio-test-column-head strong {
+      color: var(--ink);
+      font-size: 0.92rem;
+    }
+
+    .audio-test-column-head span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
     .audio-test-results {
       display: grid;
       gap: 6px;
@@ -528,6 +576,7 @@
       .controls,
       .audio-test-grid,
       .audio-test-actions,
+      .audio-test-columns,
       .native-grid,
       .native-actions {
         grid-template-columns: 1fr;
@@ -648,7 +697,29 @@
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
             <button id="audioDuplexBtn" disabled>Duplex Test</button>
           </div>
-          <ul class="audio-test-results" id="audioTestResults"></ul>
+          <div class="audio-test-columns">
+            <section class="audio-test-column" id="audioInColumn" data-state="idle">
+              <div class="audio-test-column-head">
+                <strong>In</strong>
+                <span id="audioInState">Not run</span>
+              </div>
+              <ul class="audio-test-results" id="audioInResults"></ul>
+            </section>
+            <section class="audio-test-column" id="audioOutColumn" data-state="idle">
+              <div class="audio-test-column-head">
+                <strong>Out</strong>
+                <span id="audioOutState">Not run</span>
+              </div>
+              <ul class="audio-test-results" id="audioOutResults"></ul>
+            </section>
+            <section class="audio-test-column" id="audioDuplexColumn" data-state="idle">
+              <div class="audio-test-column-head">
+                <strong>Duplex</strong>
+                <span id="audioDuplexState">Not run</span>
+              </div>
+              <ul class="audio-test-results" id="audioDuplexResults"></ul>
+            </section>
+          </div>
         </div>
       </section>
 
@@ -750,7 +821,15 @@
       wifiSetupScanLink: document.getElementById("wifiSetupScanLink"),
       audioTestPanel: document.getElementById("audioTestPanel"),
       audioTestState: document.getElementById("audioTestState"),
-      audioTestResults: document.getElementById("audioTestResults"),
+      audioInColumn: document.getElementById("audioInColumn"),
+      audioInState: document.getElementById("audioInState"),
+      audioInResults: document.getElementById("audioInResults"),
+      audioOutColumn: document.getElementById("audioOutColumn"),
+      audioOutState: document.getElementById("audioOutState"),
+      audioOutResults: document.getElementById("audioOutResults"),
+      audioDuplexColumn: document.getElementById("audioDuplexColumn"),
+      audioDuplexState: document.getElementById("audioDuplexState"),
+      audioDuplexResults: document.getElementById("audioDuplexResults"),
       hostOutputSelect: document.getElementById("hostOutputSelect"),
       meeryaInputSelect: document.getElementById("meeryaInputSelect"),
       meeryaOutputSelect: document.getElementById("meeryaOutputSelect"),
@@ -915,20 +994,43 @@
     }
 
     function clearAudioResults() {
-      els.audioTestResults.innerHTML = "";
+      els.audioInResults.innerHTML = "";
+      els.audioOutResults.innerHTML = "";
+      els.audioDuplexResults.innerHTML = "";
+      setAudioColumnState("in", "idle", "Not run");
+      setAudioColumnState("out", "idle", "Not run");
+      setAudioColumnState("duplex", "idle", "Not run");
       state.audioRecordingUrls.forEach((url) => URL.revokeObjectURL(url));
       state.audioRecordingUrls = [];
     }
 
-    function addAudioResult(label, value, ok = null) {
+    function audioColumnElements(column = "duplex") {
+      if (column === "in") {
+        return { panel: els.audioInColumn, state: els.audioInState, results: els.audioInResults };
+      }
+      if (column === "out") {
+        return { panel: els.audioOutColumn, state: els.audioOutState, results: els.audioOutResults };
+      }
+      return { panel: els.audioDuplexColumn, state: els.audioDuplexState, results: els.audioDuplexResults };
+    }
+
+    function setAudioColumnState(column, stateName, text) {
+      const target = audioColumnElements(column);
+      target.panel.dataset.state = stateName;
+      target.state.textContent = text;
+    }
+
+    function addAudioResult(column, label, value, ok = null) {
+      const target = audioColumnElements(column);
       const item = document.createElement("li");
       item.innerHTML = `<span>${label}</span><b>${value}</b>`;
       if (ok === true) item.dataset.result = "pass";
       if (ok === false) item.dataset.result = "fail";
-      els.audioTestResults.appendChild(item);
+      target.results.appendChild(item);
     }
 
-    function addAudioPlaybackResult(label, blob) {
+    function addAudioPlaybackResult(column, label, blob) {
+      const target = audioColumnElements(column);
       const item = document.createElement("li");
       const url = URL.createObjectURL(blob);
       state.audioRecordingUrls.push(url);
@@ -943,7 +1045,7 @@
         await audio.play();
       });
       item.append(text, button);
-      els.audioTestResults.appendChild(item);
+      target.results.appendChild(item);
     }
 
     function drawWaveformTrack(ctx, pcm, x, y, width, height, color) {
@@ -979,7 +1081,7 @@
       ctx.stroke();
     }
 
-    function drawWaveformCanvas(canvas, referencePcm, capturePcm) {
+    function drawWaveformCanvas(canvas, referencePcm, capturePcm, topLabel = "expected", bottomLabel = "recorded") {
       const rect = canvas.getBoundingClientRect();
       const pixelRatio = window.devicePixelRatio || 1;
       const width = Math.max(320, Math.floor(rect.width * pixelRatio));
@@ -1002,25 +1104,91 @@
       }
       ctx.fillStyle = "rgba(20, 34, 48, 0.62)";
       ctx.font = `${11 * pixelRatio}px system-ui, sans-serif`;
-      ctx.fillText("out", pad, pad + 11 * pixelRatio);
-      ctx.fillText("in", pad, pad * 2 + trackHeight + 11 * pixelRatio);
+      ctx.fillText(topLabel, pad, pad + 11 * pixelRatio);
+      ctx.fillText(bottomLabel, pad, pad * 2 + trackHeight + 11 * pixelRatio);
       drawWaveformTrack(ctx, referencePcm, pad, pad, width - pad * 2, trackHeight, "#157f76");
       drawWaveformTrack(ctx, capturePcm, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
     }
 
-    function addAudioWaveformResult(label, referencePcm, capturePcm, waveform, ok) {
+    function alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate) {
+      const reference = activeSliceForMatch(referencePcm);
+      const capture = activeSliceForMatch(capturePcm);
+      const lagSamples = Math.round((waveform.lagMs * sampleRate) / 1000);
+      const refStart = Math.max(0, -lagSamples);
+      const capStart = Math.max(0, lagSamples);
+      const overlap = Math.min(reference.length - refStart, capture.length - capStart);
+      if (overlap < 512) {
+        return { reference, capture };
+      }
+      const refAligned = reference.slice(refStart, refStart + overlap);
+      const capAligned = capture.slice(capStart, capStart + overlap);
+      if (waveform.polarity < 0) {
+        const corrected = new Float32Array(capAligned.length);
+        for (let i = 0; i < capAligned.length; ++i) {
+          corrected[i] = -capAligned[i];
+        }
+        return { reference: refAligned, capture: corrected };
+      }
+      return { reference: refAligned, capture: capAligned };
+    }
+
+    function addAudioWaveformResult(column, label, referencePcm, capturePcm, waveform, sampleRate, ok, topLabel, bottomLabel) {
+      const target = audioColumnElements(column);
       const item = document.createElement("li");
       item.dataset.result = ok ? "pass" : "fail";
       const wrapper = document.createElement("div");
       wrapper.className = "audio-waveform";
       const header = document.createElement("span");
-      header.textContent = `${label}: out/in waveform, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", inverted" : ""}`;
+      header.textContent = `${label}: aligned acoustic waveform, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", polarity corrected" : ""}`;
       const canvas = document.createElement("canvas");
       canvas.height = 132;
       wrapper.append(header, canvas);
       item.appendChild(wrapper);
-      els.audioTestResults.appendChild(item);
-      requestAnimationFrame(() => drawWaveformCanvas(canvas, referencePcm, capturePcm));
+      target.results.appendChild(item);
+      const aligned = alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate);
+      requestAnimationFrame(() => drawWaveformCanvas(canvas, aligned.reference, aligned.capture, topLabel, bottomLabel));
+    }
+
+    function selectedOptionLabel(select) {
+      return select.selectedOptions?.[0]?.textContent?.trim() || "";
+    }
+
+    function collectAudioTestReport() {
+      const readRows = (root) => [...root.querySelectorAll("li")].map((item) => ({
+          result: item.dataset.result || "info",
+          text: item.textContent.replace(/\s+/g, " ").trim(),
+        }));
+      const rows = [
+        ...readRows(els.audioInResults),
+        ...readRows(els.audioOutResults),
+        ...readRows(els.audioDuplexResults),
+      ];
+      return {
+        panelState: els.audioTestPanel.dataset.state || "",
+        stateText: els.audioTestState.textContent.trim(),
+        pass: els.audioTestPanel.dataset.state === "pass"
+          && rows.some((row) => row.result === "pass")
+          && rows.every((row) => row.result !== "fail"),
+        rows,
+        columns: {
+          in: { state: els.audioInColumn.dataset.state || "", rows: readRows(els.audioInResults) },
+          out: { state: els.audioOutColumn.dataset.state || "", rows: readRows(els.audioOutResults) },
+          duplex: { state: els.audioDuplexColumn.dataset.state || "", rows: readRows(els.audioDuplexResults) },
+        },
+        controls: {
+          refreshDisabled: els.audioRefreshBtn.disabled,
+          hostToMeeryaDisabled: els.audioHostToMeeryaBtn.disabled,
+          meeryaToHostDisabled: els.audioMeeryaToHostBtn.disabled,
+          duplexDisabled: els.audioDuplexBtn.disabled,
+        },
+        selectedDevices: {
+          hostOutput: selectedOptionLabel(els.hostOutputSelect),
+          meeryaInput: selectedOptionLabel(els.meeryaInputSelect),
+          meeryaOutput: selectedOptionLabel(els.meeryaOutputSelect),
+          hostInput: selectedOptionLabel(els.hostInputSelect),
+        },
+        log: els.terminal.textContent.slice(-12000),
+      };
     }
 
     function deviceLabel(device) {
@@ -1427,7 +1595,15 @@
       };
     }
 
-    async function runAudioPathTest({ label, outputSelect, inputSelect, clear = true }) {
+    async function runAudioPathTest({
+      label,
+      column = "duplex",
+      outputSelect,
+      inputSelect,
+      clear = true,
+      outputLabel = "output",
+      inputLabel = "input",
+    }) {
       const readiness = await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running smoke tests.");
@@ -1437,6 +1613,7 @@
       }
       setAudioTestState(label);
       setAudioPanelState("running");
+      setAudioColumnState(column, "running", "Running");
       const { pcm, sampleRate } = generateTestPcm();
       const wav = wavBlobFromPcm(pcm, sampleRate);
       const countersBefore = await readFirmwareAudioRuntime();
@@ -1453,23 +1630,41 @@
       const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
       const peakDb = 20 * Math.log10(Math.max(stats.peak, 1e-6));
       const quality = audioCapturePass(stats, waveform);
-      addAudioResult(`${label} RMS`, `${rmsDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
-      addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
-      addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
-      addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
+      addAudioResult(column, "RMS", `${rmsDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
+      addAudioResult(column, "Peak", `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
+      addAudioResult(column, "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
+      addAudioResult(column, "Zero crossing", stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
       addAudioResult(
-        `${label} waveform match`,
+        column,
+        "Waveform",
         `${Math.round(waveform.score * 100)}% (time ${Math.round(waveform.timeScore * 100)}%, freq ${Math.round(waveform.frequencyScore * 100)}%, ${waveform.lagMs} ms${waveform.polarity < 0 ? ", inverted" : ""})`,
         quality.pass,
       );
-      addAudioResult(`${label} firmware counters`, counterSummary.text, counterSummary.ok);
-      addAudioResult(`${label} result`, quality.pass ? "captured signal" : "audio signal too weak/noisy", quality.pass);
-      addAudioWaveformResult(`${label} waveform`, pcm, capture.pcm, waveform, quality.pass);
-      addAudioPlaybackResult(`${label} recording`, recording);
+      if (counterSummary.ok) {
+        addAudioResult(column, "Firmware", counterSummary.text, true);
+      }
+      addAudioResult(column, "Result", quality.pass ? "captured signal" : "audio signal too weak/noisy", quality.pass);
+      addAudioWaveformResult(column, label, pcm, capture.pcm, waveform, capture.sampleRate, quality.pass, outputLabel, inputLabel);
+      addAudioPlaybackResult(column, "Play recording", recording);
+      setAudioColumnState(column, quality.pass ? "pass" : "fail", quality.pass ? "Passed" : "Check");
       setAudioPanelState(quality.pass ? "pass" : "fail");
       setAudioTestState(quality.pass ? "Passed" : "Audio weak/noisy");
-      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% time=${Math.round(waveform.timeScore * 100)}% freq=${Math.round(waveform.frequencyScore * 100)}% lag=${waveform.lagMs}ms counters=${counterSummary.text}\n`);
-      return { pass: quality.pass, stats, waveform, recording, quality, countersBefore, countersAfter };
+      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% time=${Math.round(waveform.timeScore * 100)}% freq=${Math.round(waveform.frequencyScore * 100)}% lag=${waveform.lagMs}ms\n`);
+      return {
+        pass: quality.pass,
+        label,
+        outputLabel,
+        inputLabel,
+        stats,
+        waveform,
+        recording,
+        quality,
+        referencePcm: pcm,
+        capturePcm: capture.pcm,
+        sampleRate: capture.sampleRate,
+        countersBefore,
+        countersAfter,
+      };
     }
 
     async function maybeAutoRunAudioSmokeTest() {
@@ -1504,19 +1699,26 @@
       }
       setAudioPanelState("running");
       setAudioTestState("Running duplex test");
+      setAudioColumnState("duplex", "running", "Running");
       if (hasHostSpeaker && hasMeeryaMic) {
         results.push(await runAudioPathTest({
           label: "Computer to Meerya mic",
+          column: "in",
           outputSelect: els.hostOutputSelect,
           inputSelect: els.meeryaInputSelect,
+          outputLabel: "computer out",
+          inputLabel: "meerya mic",
           clear: false,
         }));
       }
       if (hasMeeryaSpeaker && hasHostMic) {
         results.push(await runAudioPathTest({
           label: "Meerya speaker to computer",
+          column: "out",
           outputSelect: els.meeryaOutputSelect,
           inputSelect: els.hostInputSelect,
+          outputLabel: "meerya out",
+          inputLabel: "computer mic",
           clear: false,
         }));
       }
@@ -1524,6 +1726,42 @@
         throw new Error("No complete audio test path is available.");
       }
       const allPassed = results.length > 0 && results.every((result) => result.pass);
+      addAudioResult("duplex", "Paths", `${results.filter((result) => result.pass).length}/${results.length}`, allPassed);
+      for (const result of results) {
+        addAudioWaveformResult(
+          "duplex",
+          result.label,
+          result.referencePcm,
+          result.capturePcm,
+          result.waveform,
+          result.sampleRate,
+          result.pass,
+          result.outputLabel,
+          result.inputLabel,
+        );
+      }
+      if (results.length >= 2) {
+        const first = results[0];
+        const second = results[1];
+        const count = Math.min(first.capturePcm.length, second.capturePcm.length);
+        const mixed = new Float32Array(count);
+        for (let i = 0; i < count; ++i) {
+          mixed[i] = (first.capturePcm[i] + second.capturePcm[i]) * 0.5;
+        }
+        const waveform = compareWaveforms(first.referencePcm, mixed, first.sampleRate);
+        addAudioWaveformResult(
+          "duplex",
+          "Duplex combined",
+          first.referencePcm,
+          mixed,
+          waveform,
+          first.sampleRate,
+          allPassed,
+          "test signal",
+          "combined captures",
+        );
+      }
+      setAudioColumnState("duplex", allPassed ? "pass" : "fail", allPassed ? "Passed" : "Check");
       setAudioPanelState(allPassed ? "pass" : "fail");
       setAudioTestState(allPassed ? "Passed" : "Audio weak/noisy");
       appendLog(`Audio duplex test: ${results.length} path(s), result=${allPassed ? "pass" : "fail"}\n`);
@@ -1926,13 +2164,19 @@
     els.audioRefreshBtn.addEventListener("click", () => refreshAudioDevices().catch(handleError));
     els.audioHostToMeeryaBtn.addEventListener("click", () => runAudioPathTest({
       label: "Computer to Meerya mic",
+      column: "in",
       outputSelect: els.hostOutputSelect,
       inputSelect: els.meeryaInputSelect,
+      outputLabel: "computer out",
+      inputLabel: "meerya mic",
     }).catch(handleError));
     els.audioMeeryaToHostBtn.addEventListener("click", () => runAudioPathTest({
       label: "Meerya speaker to computer",
+      column: "out",
       outputSelect: els.meeryaOutputSelect,
       inputSelect: els.hostInputSelect,
+      outputLabel: "meerya out",
+      inputLabel: "computer mic",
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
@@ -1944,6 +2188,11 @@
     requestNativeNearbySnapshot();
     setAudioTestControls();
     startAudioDeviceWatcher();
+    window.meeryaInstallerAudio = {
+      refreshDevices: refreshAudioDevices,
+      runDuplexTest: () => runAudioDuplexTest({ clear: true }),
+      report: collectAudioTestReport,
+    };
 
     loadManifest()
       .then(() => {
