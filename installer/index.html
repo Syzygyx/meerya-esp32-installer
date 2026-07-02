@@ -1147,10 +1147,14 @@
       setAudioPanelState("running");
       const { pcm, sampleRate } = generateTestPcm();
       const wav = wavBlobFromPcm(pcm, sampleRate);
+      const countersBefore = await readFirmwareAudioRuntime();
       const capturePromise = capturePcmFromDevice(inputSelect.value, 4200);
       await delay(550);
       await playWavToDevice(wav, outputSelect.value);
       const capture = await capturePromise;
+      await delay(250);
+      const countersAfter = await readFirmwareAudioRuntime();
+      const counterSummary = formatCounterDeltas(countersBefore, countersAfter);
       const stats = analyzePcm(capture.pcm);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
       const waveform = compareWaveforms(pcm, capture.pcm, capture.sampleRate);
@@ -1162,12 +1166,13 @@
       addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
       addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
       addAudioResult(`${label} waveform match`, `${Math.round(waveform.score * 100)}% / ${waveform.lagMs} ms`, quality.hasStrongMatch);
+      addAudioResult(`${label} firmware counters`, counterSummary.text, counterSummary.ok);
       addAudioResult(`${label} result`, quality.pass ? "captured signal" : "audio signal too weak/noisy", quality.pass);
       addAudioPlaybackResult(`${label} recording`, recording);
       setAudioPanelState(quality.pass ? "pass" : "fail");
       setAudioTestState(quality.pass ? "Passed" : "Audio weak/noisy");
-      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% lag=${waveform.lagMs}ms\n`);
-      return { pass: quality.pass, stats, waveform, recording, quality };
+      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% lag=${waveform.lagMs}ms counters=${counterSummary.text}\n`);
+      return { pass: quality.pass, stats, waveform, recording, quality, countersBefore, countersAfter };
     }
 
     async function maybeAutoRunAudioSmokeTest() {
@@ -1366,6 +1371,82 @@
       } finally {
         clearTimeout(timeout);
       }
+    }
+
+    function firmwareStatusUrls() {
+      const quickTest = state.target?.quickTest ?? {};
+      const configured = quickTest.statusUrls ?? [];
+      const defaults = [
+        "http://meerya.local/api/status",
+        "http://meerya.lan/api/status",
+        "http://192.168.86.75/api/status",
+        "http://192.168.4.1/api/status",
+      ];
+      return [...new Set([...configured, ...defaults])];
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 1600) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.json();
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function readFirmwareAudioRuntime() {
+      const errors = [];
+      for (const url of firmwareStatusUrls()) {
+        try {
+          const status = await fetchJsonWithTimeout(url);
+          if (status?.audio_runtime) {
+            return { url, status, runtime: status.audio_runtime };
+          }
+          errors.push(`${url}: no audio_runtime`);
+        } catch (error) {
+          errors.push(`${url}: ${error.message}`);
+        }
+      }
+      return { error: errors.slice(0, 3).join("; ") || "status unavailable" };
+    }
+
+    function counterDelta(before, after, key) {
+      const left = before?.runtime?.[key];
+      const right = after?.runtime?.[key];
+      return Number.isFinite(left) && Number.isFinite(right) ? right - left : null;
+    }
+
+    function formatCounterDeltas(before, after) {
+      if (before?.error || after?.error) {
+        return {
+          text: after?.error || before?.error || "unavailable",
+          ok: null,
+        };
+      }
+      const parts = [];
+      const add = (label, key) => {
+        const value = counterDelta(before, after, key);
+        if (value !== null) {
+          parts.push(`${label} +${value.toLocaleString()}`);
+        }
+      };
+      add("mic pkt", "microphone_usb_packets");
+      add("mic bytes", "microphone_usb_bytes");
+      add("mic zero", "microphone_usb_zero_loads");
+      add("spk pkt", "speaker_usb_packets");
+      add("spk drops", "speaker_queue_drops");
+      return {
+        text: parts.length ? parts.join(", ") : "no numeric counters",
+        ok: parts.length > 0,
+      };
     }
 
     async function loadImage(url, timeoutMs) {
