@@ -185,6 +185,23 @@
       margin-top: 14px;
     }
 
+    .build-identity {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .build-identity strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
     .file-row {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -434,6 +451,12 @@
         <label for="targetSelect">Target build</label>
         <select id="targetSelect"></select>
 
+        <div class="build-identity" id="buildIdentity">
+          <div><strong>Firmware commit:</strong> <code id="firmwareCommit">Loading</code></div>
+          <div><strong>Generated:</strong> <code id="manifestGenerated">Loading</code></div>
+          <div><strong>Status:</strong> <code id="targetStatus">Loading</code></div>
+        </div>
+
         <div class="file-list" id="fileList"></div>
 
         <div class="option-row">
@@ -563,6 +586,9 @@
       status: document.getElementById("status"),
       statusText: document.getElementById("statusText"),
       targetSelect: document.getElementById("targetSelect"),
+      firmwareCommit: document.getElementById("firmwareCommit"),
+      manifestGenerated: document.getElementById("manifestGenerated"),
+      targetStatus: document.getElementById("targetStatus"),
       fileList: document.getElementById("fileList"),
       connectBtn: document.getElementById("connectBtn"),
       flashBtn: document.getElementById("flashBtn"),
@@ -916,6 +942,9 @@
 
     function renderTarget(target) {
       state.target = target;
+      els.firmwareCommit.textContent = state.manifest?.gitHead || "unknown";
+      els.manifestGenerated.textContent = state.manifest?.generatedAt || "unknown";
+      els.targetStatus.textContent = target.status || "unknown";
       els.fileList.innerHTML = "";
       target.files.forEach((file) => {
         const row = document.createElement("div");
@@ -931,6 +960,7 @@
         els.fileList.appendChild(row);
       });
       appendLog(`Selected ${target.name}\n`);
+      appendLog(`Firmware commit: ${state.manifest?.gitHead || "unknown"} generated ${state.manifest?.generatedAt || "unknown"}\n`);
       resetQuickTest();
     }
 
