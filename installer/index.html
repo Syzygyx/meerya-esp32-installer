@@ -493,6 +493,10 @@
       background: color-mix(in srgb, var(--bg) 85%, var(--ink));
     }
 
+    .audio-waveform canvas[data-tracks="4"] {
+      height: 260px;
+    }
+
     .audio-waveform span {
       color: var(--muted);
       font-size: 0.82rem;
@@ -1110,6 +1114,35 @@
       drawWaveformTrack(ctx, capturePcm, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
     }
 
+    function drawMultiWaveformCanvas(canvas, tracks) {
+      const rect = canvas.getBoundingClientRect();
+      const pixelRatio = window.devicePixelRatio || 1;
+      const width = Math.max(320, Math.floor(rect.width * pixelRatio));
+      const height = Math.max(260, Math.floor(rect.height * pixelRatio));
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#fff";
+      ctx.fillRect(0, 0, width, height);
+      const pad = 12 * pixelRatio;
+      const trackGap = 12 * pixelRatio;
+      const trackHeight = (height - pad * 2 - trackGap * (tracks.length - 1)) / tracks.length;
+      ctx.font = `${11 * pixelRatio}px system-ui, sans-serif`;
+      tracks.forEach((track, index) => {
+        const y = pad + index * (trackHeight + trackGap);
+        ctx.strokeStyle = "rgba(20, 34, 48, 0.18)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pad, y + trackHeight / 2);
+        ctx.lineTo(width - pad, y + trackHeight / 2);
+        ctx.stroke();
+        ctx.fillStyle = track.color;
+        ctx.fillText(track.label, pad, y + 11 * pixelRatio);
+        drawWaveformTrack(ctx, track.pcm, pad, y, width - pad * 2, trackHeight, track.color);
+      });
+    }
+
     function alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate) {
       const reference = activeSliceForMatch(referencePcm);
       const capture = activeSliceForMatch(capturePcm);
@@ -1147,6 +1180,23 @@
       target.results.appendChild(item);
       const aligned = alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate);
       requestAnimationFrame(() => drawWaveformCanvas(canvas, aligned.reference, aligned.capture, topLabel, bottomLabel));
+    }
+
+    function addAudioMultiWaveformResult(column, label, tracks, ok) {
+      const target = audioColumnElements(column);
+      const item = document.createElement("li");
+      item.dataset.result = ok ? "pass" : "fail";
+      const wrapper = document.createElement("div");
+      wrapper.className = "audio-waveform";
+      const header = document.createElement("span");
+      header.textContent = label;
+      const canvas = document.createElement("canvas");
+      canvas.height = 260;
+      canvas.dataset.tracks = "4";
+      wrapper.append(header, canvas);
+      item.appendChild(wrapper);
+      target.results.appendChild(item);
+      requestAnimationFrame(() => drawMultiWaveformCanvas(canvas, tracks));
     }
 
     function selectedOptionLabel(select) {
@@ -1707,7 +1757,7 @@
           outputSelect: els.hostOutputSelect,
           inputSelect: els.meeryaInputSelect,
           outputLabel: "computer out",
-          inputLabel: "meerya mic",
+          inputLabel: "meerya in",
           clear: false,
         }));
       }
@@ -1718,7 +1768,7 @@
           outputSelect: els.meeryaOutputSelect,
           inputSelect: els.hostInputSelect,
           outputLabel: "meerya out",
-          inputLabel: "computer mic",
+          inputLabel: "computer in",
           clear: false,
         }));
       }
@@ -1727,39 +1777,36 @@
       }
       const allPassed = results.length > 0 && results.every((result) => result.pass);
       addAudioResult("duplex", "Paths", `${results.filter((result) => result.pass).length}/${results.length}`, allPassed);
-      for (const result of results) {
-        addAudioWaveformResult(
-          "duplex",
-          result.label,
-          result.referencePcm,
-          result.capturePcm,
-          result.waveform,
-          result.sampleRate,
-          result.pass,
-          result.outputLabel,
-          result.inputLabel,
-        );
-      }
       if (results.length >= 2) {
         const first = results[0];
         const second = results[1];
-        const count = Math.min(first.capturePcm.length, second.capturePcm.length);
-        const mixed = new Float32Array(count);
-        for (let i = 0; i < count; ++i) {
-          mixed[i] = (first.capturePcm[i] + second.capturePcm[i]) * 0.5;
-        }
-        const waveform = compareWaveforms(first.referencePcm, mixed, first.sampleRate);
-        addAudioWaveformResult(
+        const firstAligned = alignedWaveformsForDisplay(first.referencePcm, first.capturePcm, first.waveform, first.sampleRate);
+        const secondAligned = alignedWaveformsForDisplay(second.referencePcm, second.capturePcm, second.waveform, second.sampleRate);
+        addAudioMultiWaveformResult(
           "duplex",
-          "Duplex combined",
-          first.referencePcm,
-          mixed,
-          waveform,
-          first.sampleRate,
+          "Duplex endpoints",
+          [
+            { label: "computer out", pcm: firstAligned.reference, color: "#157f76" },
+            { label: "computer in", pcm: secondAligned.capture, color: "#315fbd" },
+            { label: "meerya out", pcm: secondAligned.reference, color: "#8a5a1f" },
+            { label: "meerya in", pcm: firstAligned.capture, color: "#7a3eb1" },
+          ],
           allPassed,
-          "test signal",
-          "combined captures",
         );
+      } else {
+        for (const result of results) {
+          addAudioWaveformResult(
+            "duplex",
+            result.label,
+            result.referencePcm,
+            result.capturePcm,
+            result.waveform,
+            result.sampleRate,
+            result.pass,
+            result.outputLabel,
+            result.inputLabel,
+          );
+        }
       }
       setAudioColumnState("duplex", allPassed ? "pass" : "fail", allPassed ? "Passed" : "Check");
       setAudioPanelState(allPassed ? "pass" : "fail");
@@ -2168,7 +2215,7 @@
       outputSelect: els.hostOutputSelect,
       inputSelect: els.meeryaInputSelect,
       outputLabel: "computer out",
-      inputLabel: "meerya mic",
+      inputLabel: "meerya in",
     }).catch(handleError));
     els.audioMeeryaToHostBtn.addEventListener("click", () => runAudioPathTest({
       label: "Meerya speaker to computer",
@@ -2176,7 +2223,7 @@
       outputSelect: els.meeryaOutputSelect,
       inputSelect: els.hostInputSelect,
       outputLabel: "meerya out",
-      inputLabel: "computer mic",
+      inputLabel: "computer in",
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
