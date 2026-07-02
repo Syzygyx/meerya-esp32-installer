@@ -308,6 +308,21 @@
       background: var(--bg);
     }
 
+    .audio-test[data-state="running"],
+    .audio-test[data-state="waiting"] {
+      border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+    }
+
+    .audio-test[data-state="pass"] {
+      border-color: color-mix(in srgb, var(--ok) 65%, var(--line));
+      background: color-mix(in srgb, var(--ok) 8%, var(--bg));
+    }
+
+    .audio-test[data-state="fail"] {
+      border-color: color-mix(in srgb, var(--warn) 75%, var(--line));
+      background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+    }
+
     .audio-test-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -341,6 +356,14 @@
     .audio-test-results b {
       color: var(--ink);
       font-weight: 700;
+    }
+
+    .audio-test-results li[data-result="pass"] b {
+      color: var(--ok);
+    }
+
+    .audio-test-results li[data-result="fail"] b {
+      color: var(--warn);
     }
 
     progress {
@@ -509,8 +532,8 @@
           </div>
           <div class="audio-test-actions">
             <button id="audioRefreshBtn">Refresh Devices</button>
-            <button id="audioHostToMeeryaBtn">Computer → Meerya Mic</button>
-            <button id="audioMeeryaToHostBtn">Meerya Speaker → Computer</button>
+            <button id="audioHostToMeeryaBtn" disabled>Computer → Meerya Mic</button>
+            <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
           </div>
           <ul class="audio-test-results" id="audioTestResults"></ul>
         </div>
@@ -580,6 +603,7 @@
       transport: null,
       loader: null,
       connected: false,
+      meeryaAudioReady: false,
     };
 
     const els = {
@@ -600,6 +624,7 @@
       quickTestState: document.getElementById("quickTestState"),
       quickTestResults: document.getElementById("quickTestResults"),
       quickTestLinks: document.getElementById("quickTestLinks"),
+      audioTestPanel: document.getElementById("audioTestPanel"),
       audioTestState: document.getElementById("audioTestState"),
       audioTestResults: document.getElementById("audioTestResults"),
       hostOutputSelect: document.getElementById("hostOutputSelect"),
@@ -650,6 +675,22 @@
       els.progressText.textContent = text;
     }
 
+    function updateFlashControls() {
+      if (state.meeryaAudioReady) {
+        els.connectBtn.disabled = true;
+        els.flashBtn.disabled = true;
+        els.disconnectBtn.disabled = !state.connected;
+        if (!state.connected) {
+          setStatus("App audio detected", "done");
+          setProgress(0, "Meerya is running as audio. Use bootloader mode to flash.");
+        }
+        return;
+      }
+      els.connectBtn.disabled = state.connected;
+      els.flashBtn.disabled = !state.connected;
+      els.disconnectBtn.disabled = !state.connected;
+    }
+
     function resetQuickTest(stateText = "Not run", stateName = "idle") {
       els.quickTestPanel.dataset.state = stateName;
       els.quickTestState.textContent = stateText;
@@ -678,13 +719,55 @@
       els.audioTestState.textContent = text;
     }
 
+    function setAudioPanelState(stateName) {
+      els.audioTestPanel.dataset.state = stateName;
+    }
+
+    function setAudioTestControls(readiness = {}) {
+      const hasMeeryaInput = Boolean(readiness.hasMeeryaInput);
+      const hasMeeryaOutput = Boolean(readiness.hasMeeryaOutput);
+      const hasHostInput = Boolean(readiness.hasHostInput);
+      const hasHostOutput = Boolean(readiness.hasHostOutput);
+      const hasMeeryaDuplex = hasMeeryaInput && hasMeeryaOutput;
+      els.audioHostToMeeryaBtn.disabled = !(hasMeeryaDuplex && hasHostOutput);
+      els.audioMeeryaToHostBtn.disabled = !(hasMeeryaDuplex && hasHostInput);
+    }
+
+    function audioReadinessFromDevices(devices) {
+      return {
+        hasMeeryaInput: devices.some((device) => device.kind === "audioinput" && isMeeryaDevice(device)),
+        hasMeeryaOutput: devices.some((device) => device.kind === "audiooutput" && isMeeryaDevice(device)),
+        hasHostInput: devices.some((device) => device.kind === "audioinput" && !isMeeryaDevice(device)),
+        hasHostOutput: devices.some((device) => device.kind === "audiooutput" && !isMeeryaDevice(device)),
+      };
+    }
+
+    function audioReadinessLabel(readiness) {
+      if (!readiness.hasMeeryaInput && !readiness.hasMeeryaOutput) {
+        setAudioPanelState("waiting");
+        return "Waiting for Meerya audio";
+      }
+      if (!readiness.hasMeeryaInput) {
+        setAudioPanelState("waiting");
+        return "Waiting for Meerya microphone";
+      }
+      if (!readiness.hasMeeryaOutput) {
+        setAudioPanelState("waiting");
+        return "Waiting for Meerya speaker";
+      }
+      setAudioPanelState("ready");
+      return "Devices ready";
+    }
+
     function clearAudioResults() {
       els.audioTestResults.innerHTML = "";
     }
 
-    function addAudioResult(label, value) {
+    function addAudioResult(label, value, ok = null) {
       const item = document.createElement("li");
       item.innerHTML = `<span>${label}</span><b>${value}</b>`;
+      if (ok === true) item.dataset.result = "pass";
+      if (ok === false) item.dataset.result = "fail";
       els.audioTestResults.appendChild(item);
     }
 
@@ -750,6 +833,7 @@
       permissionStream.getTracks().forEach((track) => track.stop());
 
       const devices = await navigator.mediaDevices.enumerateDevices();
+      const readiness = audioReadinessFromDevices(devices);
       const hostOutput = pickDevice(devices, "audiooutput", scoreHostDevice);
       const meeryaInput = pickDevice(devices, "audioinput", (device) => isMeeryaDevice(device) ? 100 : 0);
       const meeryaOutput = pickDevice(devices, "audiooutput", (device) => isMeeryaDevice(device) ? 100 : 0);
@@ -759,8 +843,12 @@
       populateDeviceSelect(els.meeryaInputSelect, devices, "audioinput", meeryaInput);
       populateDeviceSelect(els.meeryaOutputSelect, devices, "audiooutput", meeryaOutput);
       populateDeviceSelect(els.hostInputSelect, devices, "audioinput", hostInput);
-      setAudioTestState("Devices ready");
-      appendLog(`Audio smoke test: found ${devices.length} media devices\n`);
+      setAudioTestControls(readiness);
+      state.meeryaAudioReady = readiness.hasMeeryaInput && readiness.hasMeeryaOutput;
+      updateFlashControls();
+      setAudioTestState(audioReadinessLabel(readiness));
+      appendLog(`Audio smoke test: found ${devices.length} media devices, Meerya input=${readiness.hasMeeryaInput ? "yes" : "no"}, output=${readiness.hasMeeryaOutput ? "yes" : "no"}\n`);
+      return readiness;
     }
 
     function generateTestPcm(sampleRate = 48000, durationSeconds = 2.8) {
@@ -881,8 +969,13 @@
     }
 
     async function runAudioPathTest({ label, outputSelect, inputSelect }) {
+      const readiness = await refreshAudioDevices();
+      if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
+        throw new Error("Meerya must appear as both an audio input and output before running smoke tests.");
+      }
       clearAudioResults();
       setAudioTestState(label);
+      setAudioPanelState("running");
       const { pcm, sampleRate } = generateTestPcm();
       const wav = wavBlobFromPcm(pcm, sampleRate);
       const capturePromise = capturePcmFromDevice(inputSelect.value, 4200);
@@ -897,7 +990,8 @@
       addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`);
       addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`);
       addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3));
-      addAudioResult(`${label} result`, pass ? "audible capture" : "needs check");
+      addAudioResult(`${label} result`, pass ? "audible capture" : "needs check", pass);
+      setAudioPanelState(pass ? "pass" : "fail");
       setAudioTestState(pass ? "Passed" : "Needs check");
       appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}%\n`);
       return { pass, stats };
@@ -905,29 +999,55 @@
 
     async function maybeAutoRunAudioSmokeTest() {
       try {
-        await refreshAudioDevices();
+        const readiness = await waitForMeeryaAudioDevices();
+        if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
+          setAudioPanelState("waiting");
+          setAudioTestState(audioReadinessLabel(readiness));
+          appendLog("Audio smoke test waiting: Meerya is not visible as both audio input and output yet.\n");
+          return;
+        }
         const hasMeeryaMic = Boolean(els.meeryaInputSelect.value);
         const hasMeeryaSpeaker = Boolean(els.meeryaOutputSelect.value);
         const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
         const hasHostMic = Boolean(els.hostInputSelect.value);
+        const results = [];
+        setAudioPanelState("running");
+        setAudioTestState("Running tests");
         if (hasHostSpeaker && hasMeeryaMic) {
-          await runAudioPathTest({
+          results.push(await runAudioPathTest({
             label: "Computer to Meerya mic",
             outputSelect: els.hostOutputSelect,
             inputSelect: els.meeryaInputSelect,
-          });
+          }));
         }
         if (hasMeeryaSpeaker && hasHostMic) {
-          await runAudioPathTest({
+          results.push(await runAudioPathTest({
             label: "Meerya speaker to computer",
             outputSelect: els.meeryaOutputSelect,
             inputSelect: els.hostInputSelect,
-          });
+          }));
         }
+        const allPassed = results.length > 0 && results.every((result) => result.pass);
+        setAudioPanelState(allPassed ? "pass" : "fail");
+        setAudioTestState(allPassed ? "Passed" : "Needs check");
       } catch (error) {
+        setAudioPanelState("fail");
         setAudioTestState("Manual permission needed");
         appendLog(`Audio smoke test skipped: ${error.message}\n`);
       }
+    }
+
+    async function waitForMeeryaAudioDevices(timeoutMs = 30000) {
+      const deadline = Date.now() + timeoutMs;
+      let lastReadiness = {};
+      while (Date.now() < deadline) {
+        lastReadiness = await refreshAudioDevices();
+        if (lastReadiness.hasMeeryaInput && lastReadiness.hasMeeryaOutput) {
+          return lastReadiness;
+        }
+        await delay(1500);
+      }
+      return lastReadiness;
     }
 
     function formatHex(address) {
@@ -1003,9 +1123,8 @@
       appendLog("Connecting to ESP32-S3...\n");
       const chipName = await state.loader.main("default_reset");
       state.connected = true;
-      els.flashBtn.disabled = false;
-      els.disconnectBtn.disabled = false;
-      els.connectBtn.disabled = true;
+      state.meeryaAudioReady = false;
+      updateFlashControls();
       setStatus(chipName, "ready");
       appendLog(`Connected: ${chipName}\n`);
       setProgress(0, "Ready to flash.");
@@ -1182,9 +1301,7 @@
       state.transport = null;
       state.loader = null;
       state.connected = false;
-      els.connectBtn.disabled = false;
-      els.flashBtn.disabled = true;
-      els.disconnectBtn.disabled = true;
+      updateFlashControls();
       setStatus("Idle");
       setProgress(0, "Disconnected.");
     }
@@ -1194,9 +1311,7 @@
       appendLog(`Error: ${message}\n`);
       setStatus("Error");
       setProgress(0, message);
-      els.connectBtn.disabled = false;
-      els.flashBtn.disabled = !state.connected;
-      els.disconnectBtn.disabled = !state.connected;
+      updateFlashControls();
     }
 
     function updateNativeNearby(snapshot) {
@@ -1245,6 +1360,7 @@
     window.addEventListener("meerya:nearby", (event) => updateNativeNearby(event.detail ?? {}));
     window.meeryaReceiveNearbyData = updateNativeNearby;
     requestNativeNearbySnapshot();
+    setAudioTestControls();
 
     loadManifest()
       .then(() => {
