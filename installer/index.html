@@ -494,11 +494,11 @@
     }
 
     .audio-waveform canvas[data-tracks="3"] {
-      height: 210px;
+      height: 270px;
     }
 
     .audio-waveform canvas[data-tracks="4"] {
-      height: 260px;
+      height: 340px;
     }
 
     .audio-waveform span {
@@ -972,7 +972,7 @@
       const hasMeeryaDuplex = hasMeeryaInput && hasMeeryaOutput;
       els.audioHostToMeeryaBtn.disabled = !(hasMeeryaDuplex && hasHostOutput);
       els.audioMeeryaToHostBtn.disabled = !(hasMeeryaDuplex && hasHostInput);
-      els.audioDuplexBtn.disabled = !(hasMeeryaDuplex && hasHostOutput && hasHostInput);
+      els.audioDuplexBtn.disabled = !(hasMeeryaDuplex && hasHostOutput);
     }
 
     function audioReadinessFromDevices(devices) {
@@ -1088,33 +1088,94 @@
       }));
     }
 
-    function drawSpectrumTrack(ctx, pcm, sampleRate, x, y, width, height, color) {
-      const spectrum = spectrumForPlot(pcm, sampleRate);
-      if (spectrum.length === 0) {
+    function timeFftForPlot(pcm, sampleRate, minHz = 100, maxHz = 3600, bins = 56, frames = 18) {
+      const active = activeSliceForMatch(pcm);
+      if (active.length < 128) {
+        return [];
+      }
+      const windowLength = Math.min(active.length, Math.max(1024, Math.floor(sampleRate * 0.09)));
+      const frameStep = Math.max(1, Math.floor((active.length - windowLength) / Math.max(1, frames - 1)));
+      const rows = [];
+      let maxDb = -120;
+      for (let frame = 0; frame < frames; ++frame) {
+        const start = Math.min(Math.max(0, active.length - windowLength), frame * frameStep);
+        const row = [];
+        for (let bin = 0; bin < bins; ++bin) {
+          const frequency = minHz + ((maxHz - minHz) * bin) / Math.max(1, bins - 1);
+          let real = 0;
+          let imag = 0;
+          for (let i = 0; i < windowLength; ++i) {
+            const sample = active[start + i] || 0;
+            const window = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / Math.max(1, windowLength - 1));
+            const phase = (2 * Math.PI * frequency * i) / sampleRate;
+            real += sample * window * Math.cos(phase);
+            imag -= sample * window * Math.sin(phase);
+          }
+          const magnitude = (2 * Math.hypot(real, imag)) / Math.max(1, windowLength);
+          const db = 20 * Math.log10(Math.max(magnitude, 1e-8));
+          maxDb = Math.max(maxDb, db);
+          row.push({ frequency, db });
+        }
+        rows.push(row);
+      }
+      return rows.map((row) => row.map((point) => ({
+        frequency: point.frequency,
+        value: Math.max(0, Math.min(1, (point.db - (maxDb - 58)) / 58)),
+      })));
+    }
+
+    function hexToRgb(hex) {
+      const value = hex.replace("#", "");
+      const parsed = Number.parseInt(value.length === 3
+        ? value.split("").map((part) => part + part).join("")
+        : value, 16);
+      return {
+        r: (parsed >> 16) & 255,
+        g: (parsed >> 8) & 255,
+        b: parsed & 255,
+      };
+    }
+
+    function drawTimeFftTrack(ctx, pcm, sampleRate, x, y, width, height, color) {
+      const frames = timeFftForPlot(pcm, sampleRate);
+      if (frames.length === 0) {
         return;
       }
+      const rgb = hexToRgb(color);
+      const depthX = Math.min(width * 0.18, 56);
+      const depthY = Math.min(height * 0.26, 26);
+      const plotX = x + depthX * 0.14;
+      const plotY = y + depthY;
+      const plotWidth = width - depthX * 0.4;
+      const plotHeight = height - depthY - 4;
       ctx.strokeStyle = "rgba(20, 34, 48, 0.12)";
+      ctx.fillStyle = "rgba(20, 34, 48, 0.025)";
       ctx.lineWidth = 1;
-      for (const ratio of [0.25, 0.5, 0.75]) {
-        const gy = y + height * ratio;
+      for (let frame = frames.length - 1; frame >= 0; --frame) {
+        const row = frames[frame];
+        const depth = frame / Math.max(1, frames.length - 1);
+        const ox = (1 - depth) * depthX;
+        const oy = depth * depthY;
         ctx.beginPath();
-        ctx.moveTo(x, gy);
-        ctx.lineTo(x + width, gy);
+        ctx.moveTo(plotX + ox, plotY + oy + plotHeight);
+        ctx.lineTo(plotX + ox + plotWidth, plotY + oy + plotHeight);
+        ctx.lineTo(plotX + ox + plotWidth, plotY + oy);
         ctx.stroke();
-      }
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      spectrum.forEach((point, index) => {
-        const px = x + (width * index) / Math.max(1, spectrum.length - 1);
-        const py = y + height - point.value * height * 0.88;
-        if (index === 0) {
-          ctx.moveTo(px, py);
-        } else {
+        for (let bin = 0; bin < row.length; ++bin) {
+          const point = row[bin];
+          if (point.value < 0.035) {
+            continue;
+          }
+          const px = plotX + ox + (plotWidth * bin) / Math.max(1, row.length - 1);
+          const barHeight = point.value * plotHeight * 0.86;
+          const py = plotY + oy + plotHeight - barHeight;
+          ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${0.18 + point.value * 0.7})`;
+          ctx.beginPath();
+          ctx.moveTo(px, plotY + oy + plotHeight);
           ctx.lineTo(px, py);
+          ctx.stroke();
         }
-      });
-      ctx.stroke();
+      }
     }
 
     function drawWaveformCanvas(canvas, referencePcm, capturePcm, sampleRate, topLabel = "expected", bottomLabel = "recorded") {
@@ -1142,11 +1203,12 @@
       ctx.font = `${11 * pixelRatio}px system-ui, sans-serif`;
       ctx.fillText(topLabel, pad, pad + 11 * pixelRatio);
       ctx.fillText(bottomLabel, pad, pad * 2 + trackHeight + 11 * pixelRatio);
-      drawSpectrumTrack(ctx, referencePcm, sampleRate, pad, pad, width - pad * 2, trackHeight, "#157f76");
-      drawSpectrumTrack(ctx, capturePcm, sampleRate, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
+      drawTimeFftTrack(ctx, referencePcm, sampleRate, pad, pad, width - pad * 2, trackHeight, "#157f76");
+      drawTimeFftTrack(ctx, capturePcm, sampleRate, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
       ctx.fillStyle = "rgba(20, 34, 48, 0.45)";
       ctx.fillText("100 Hz", pad, height - 4 * pixelRatio);
       ctx.fillText("3.6 kHz", width - pad - 44 * pixelRatio, height - 4 * pixelRatio);
+      ctx.fillText("time ->", width - pad - 94 * pixelRatio, pad + 11 * pixelRatio);
     }
 
     function drawMultiWaveformCanvas(canvas, tracks) {
@@ -1174,11 +1236,12 @@
         ctx.stroke();
         ctx.fillStyle = track.color;
         ctx.fillText(track.label, pad, y + 11 * pixelRatio);
-        drawSpectrumTrack(ctx, track.pcm, track.sampleRate || 48000, pad, y, width - pad * 2, trackHeight, track.color);
+        drawTimeFftTrack(ctx, track.pcm, track.sampleRate || 48000, pad, y, width - pad * 2, trackHeight, track.color);
       });
       ctx.fillStyle = "rgba(20, 34, 48, 0.45)";
       ctx.fillText("100 Hz", pad, height - 4 * pixelRatio);
       ctx.fillText("3.6 kHz", width - pad - 44 * pixelRatio, height - 4 * pixelRatio);
+      ctx.fillText("time ->", width - pad - 94 * pixelRatio, pad + 11 * pixelRatio);
     }
 
     function alignedWaveformsForDisplay(referencePcm, capturePcm, waveform, sampleRate) {
@@ -1210,7 +1273,7 @@
       const wrapper = document.createElement("div");
       wrapper.className = "audio-waveform";
       const header = document.createElement("span");
-      header.textContent = `${label}: FFT spectrum, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", polarity corrected" : ""}`;
+      header.textContent = `${label}: 3D TFFT plot, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", polarity corrected" : ""}`;
       const canvas = document.createElement("canvas");
       canvas.height = 132;
       wrapper.append(header, canvas);
@@ -1229,8 +1292,8 @@
       const header = document.createElement("span");
       header.textContent = label;
       const canvas = document.createElement("canvas");
-      canvas.height = 260;
-      canvas.dataset.tracks = "4";
+      canvas.height = tracks.length >= 4 ? 340 : tracks.length >= 3 ? 270 : 132;
+      canvas.dataset.tracks = String(tracks.length);
       wrapper.append(header, canvas);
       item.appendChild(wrapper);
       target.results.appendChild(item);
@@ -1363,7 +1426,6 @@
       return Boolean(
         readiness.hasMeeryaInput
         && readiness.hasMeeryaOutput
-        && readiness.hasHostInput
         && readiness.hasHostOutput
       );
     }
@@ -1421,6 +1483,17 @@
         pcm[i] = gain * envelope * (0.42 * Math.sin(2 * Math.PI * chirpHz * t) + marker);
       }
       return { pcm, sampleRate };
+    }
+
+    function generateTonePcm(sampleRate = 48000, durationSeconds = 3.0, frequencyHz = 1000, gain = 0.25) {
+      const sampleCount = Math.round(sampleRate * durationSeconds);
+      const pcm = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; ++i) {
+        const t = i / sampleRate;
+        const envelope = Math.min(1, t / 0.08, (durationSeconds - t) / 0.08);
+        pcm[i] = gain * envelope * Math.sin(2 * Math.PI * frequencyHz * t);
+      }
+      return { pcm, sampleRate, frequencyHz };
     }
 
     function wavBlobFromPcm(pcm, sampleRate) {
@@ -1640,6 +1713,26 @@
       return bins.map((value) => value / norm);
     }
 
+    function frequencyMagnitude(pcm, sampleRate, frequency) {
+      const active = activeSliceForMatch(pcm);
+      const step = Math.max(1, Math.floor(active.length / 48000));
+      let real = 0;
+      let imag = 0;
+      let count = 0;
+      for (let i = 0; i < active.length; i += step) {
+        const sample = active[i] || 0;
+        const phase = (2 * Math.PI * frequency * i) / sampleRate;
+        real += sample * Math.cos(phase);
+        imag -= sample * Math.sin(phase);
+        count += 1;
+      }
+      return (2 * Math.hypot(real, imag)) / Math.max(1, count);
+    }
+
+    function dbfs(value) {
+      return 20 * Math.log10(Math.max(value, 1e-8));
+    }
+
     function cosineSimilarity(left, right) {
       let dot = 0;
       let leftNorm = 0;
@@ -1781,78 +1874,71 @@
       const hasMeeryaMic = Boolean(els.meeryaInputSelect.value);
       const hasMeeryaSpeaker = Boolean(els.meeryaOutputSelect.value);
       const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
-      const hasHostMic = Boolean(els.hostInputSelect.value);
-      const results = [];
+      if (!hasHostSpeaker || !hasMeeryaMic || !hasMeeryaSpeaker) {
+        throw new Error("Duplex needs the computer speaker, Meerya speaker, and Meerya microphone.");
+      }
       if (clear) {
         clearAudioResults();
       }
       setAudioPanelState("running");
       setAudioTestState("Running duplex test");
       setAudioColumnState("duplex", "running", "Running");
-      if (hasHostSpeaker && hasMeeryaMic) {
-        results.push(await runAudioPathTest({
-          label: "Computer to Meerya mic",
-          column: "in",
-          outputSelect: els.hostOutputSelect,
-          inputSelect: els.meeryaInputSelect,
-          outputLabel: "computer out",
-          inputLabel: "meerya in",
-          clear: false,
-        }));
-      }
-      if (hasMeeryaSpeaker && hasHostMic) {
-        results.push(await runAudioPathTest({
-          label: "Meerya speaker to computer",
-          column: "out",
-          outputSelect: els.meeryaOutputSelect,
-          inputSelect: els.hostInputSelect,
-          outputLabel: "meerya out",
-          inputLabel: "computer in",
-          playbackGain: 0.2,
-          clear: false,
-        }));
-      }
-      if (results.length === 0) {
-        throw new Error("No complete audio test path is available.");
-      }
-      const allPassed = results.length > 0 && results.every((result) => result.pass);
-      addAudioResult("duplex", "Paths", `${results.filter((result) => result.pass).length}/${results.length}`, allPassed);
-      if (results.length >= 2) {
-        const first = results[0];
-        const second = results[1];
-        const firstAligned = alignedWaveformsForDisplay(first.referencePcm, first.capturePcm, first.waveform, first.sampleRate);
-        const secondAligned = alignedWaveformsForDisplay(second.referencePcm, second.capturePcm, second.waveform, second.sampleRate);
-        addAudioMultiWaveformResult(
-          "duplex",
-          "Duplex endpoints",
-          [
-            { label: "computer out", pcm: firstAligned.reference, sampleRate: first.sampleRate, color: "#157f76" },
-            { label: "computer in", pcm: secondAligned.capture, sampleRate: second.sampleRate, color: "#315fbd" },
-            { label: "meerya out", pcm: secondAligned.reference, sampleRate: second.sampleRate, color: "#8a5a1f" },
-            { label: "meerya in", pcm: firstAligned.capture, sampleRate: first.sampleRate, color: "#7a3eb1" },
-          ],
-          allPassed,
-        );
-      } else {
-        for (const result of results) {
-          addAudioWaveformResult(
-            "duplex",
-            result.label,
-            result.referencePcm,
-            result.capturePcm,
-            result.waveform,
-            result.sampleRate,
-            result.pass,
-            result.outputLabel,
-            result.inputLabel,
-          );
-        }
-      }
-      setAudioColumnState("duplex", allPassed ? "pass" : "fail", allPassed ? "Passed" : "Check");
-      setAudioPanelState(allPassed ? "pass" : "fail");
-      setAudioTestState(allPassed ? "Passed" : "Audio weak/noisy");
-      appendLog(`Audio duplex test: ${results.length} path(s), result=${allPassed ? "pass" : "fail"}\n`);
-      return { pass: allPassed, results };
+      const computerTone = generateTonePcm(48000, 3.0, 1600, 0.34);
+      const meeryaTone = generateTonePcm(48000, 3.0, 700, 0.09);
+      const computerWav = wavBlobFromPcm(computerTone.pcm, computerTone.sampleRate);
+      const meeryaWav = wavBlobFromPcm(meeryaTone.pcm, meeryaTone.sampleRate);
+      const capturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
+      await delay(550);
+      await Promise.all([
+        playWavToDevice(computerWav, els.hostOutputSelect.value),
+        playWavToDevice(meeryaWav, els.meeryaOutputSelect.value),
+      ]);
+      const capture = await capturePromise;
+      const stats = analyzePcm(capture.pcm);
+      const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
+      const computerMagnitude = frequencyMagnitude(capture.pcm, capture.sampleRate, computerTone.frequencyHz);
+      const meeryaMagnitude = frequencyMagnitude(capture.pcm, capture.sampleRate, meeryaTone.frequencyHz);
+      const separationDb = dbfs(computerMagnitude) - dbfs(meeryaMagnitude);
+      const hasAudibleSignal = stats.rms > 0.00012 && stats.peak > 0.0008;
+      const isNotClipped = stats.clippedRatio < 0.01;
+      const computerTonePresent = computerMagnitude > 0.00002;
+      const echoSuppressed = separationDb >= 3;
+      const pass = hasAudibleSignal && isNotClipped && computerTonePresent && echoSuppressed;
+      addAudioResult("duplex", "Computer out tone B", `${computerTone.frequencyHz} Hz`, true);
+      addAudioResult("duplex", "Meerya out tone A", `${meeryaTone.frequencyHz} Hz`, true);
+      addAudioResult("duplex", "Meerya mic RMS", `${dbfs(stats.rms).toFixed(1)} dBFS`, hasAudibleSignal);
+      addAudioResult("duplex", "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, isNotClipped);
+      addAudioResult("duplex", "Computer tone in mic", `${dbfs(computerMagnitude).toFixed(1)} dBFS`, computerTonePresent);
+      addAudioResult("duplex", "Meerya tone leak", `${dbfs(meeryaMagnitude).toFixed(1)} dBFS`, echoSuppressed);
+      addAudioResult("duplex", "AEC separation", `${separationDb.toFixed(1)} dB`, echoSuppressed);
+      addAudioResult("duplex", "Result", pass ? "Meerya hears computer tone while suppressing itself" : "duplex signal needs check", pass);
+      addAudioMultiWaveformResult(
+        "duplex",
+        "Duplex 3D TFFT endpoints",
+        [
+          { label: "computer out tone B", pcm: computerTone.pcm, sampleRate: computerTone.sampleRate, color: "#157f76" },
+          { label: "meerya out tone A", pcm: meeryaTone.pcm, sampleRate: meeryaTone.sampleRate, color: "#8a5a1f" },
+          { label: "meerya in capture", pcm: capture.pcm, sampleRate: capture.sampleRate, color: "#7a3eb1" },
+        ],
+        pass,
+      );
+      addAudioPlaybackResult("duplex", "Play Meerya capture", recording);
+      setAudioColumnState("duplex", pass ? "pass" : "fail", pass ? "Passed" : "Check");
+      setAudioPanelState(pass ? "pass" : "fail");
+      setAudioTestState(pass ? "Passed" : "Audio weak/noisy");
+      appendLog(`Audio duplex test: computer=${computerTone.frequencyHz}Hz ${dbfs(computerMagnitude).toFixed(1)}dBFS, meerya=${meeryaTone.frequencyHz}Hz ${dbfs(meeryaMagnitude).toFixed(1)}dBFS, separation=${separationDb.toFixed(1)}dB, clipped=${(stats.clippedRatio * 100).toFixed(2)}%, result=${pass ? "pass" : "fail"}\n`);
+      return {
+        pass,
+        stats,
+        computerMagnitude,
+        meeryaMagnitude,
+        separationDb,
+        recording,
+        computerTone,
+        meeryaTone,
+        capturePcm: capture.pcm,
+        sampleRate: capture.sampleRate,
+      };
     }
 
     async function waitForMeeryaAudioDevices(timeoutMs = 30000) {
@@ -2264,7 +2350,7 @@
       inputSelect: els.hostInputSelect,
       outputLabel: "meerya out",
       inputLabel: "computer in",
-      playbackGain: 0.2,
+      playbackGain: 0.12,
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
