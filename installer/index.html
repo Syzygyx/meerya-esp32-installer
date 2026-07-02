@@ -281,6 +281,51 @@
       text-decoration: none;
     }
 
+    .audio-test {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+
+    .audio-test-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .audio-test-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .audio-test-results {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .audio-test-results li {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      padding-top: 6px;
+    }
+
+    .audio-test-results b {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
     progress {
       width: 100%;
       height: 16px;
@@ -357,6 +402,8 @@
       header,
       .layout,
       .controls,
+      .audio-test-grid,
+      .audio-test-actions,
       .native-grid,
       .native-actions {
         grid-template-columns: 1fr;
@@ -412,6 +459,37 @@
           </div>
           <ul class="quick-test-results" id="quickTestResults"></ul>
           <div class="quick-test-links" id="quickTestLinks"></div>
+        </div>
+
+        <div class="audio-test" id="audioTestPanel">
+          <div class="quick-test-head">
+            <strong>Audio Smoke Test</strong>
+            <span id="audioTestState">Not run</span>
+          </div>
+          <div class="audio-test-grid">
+            <div>
+              <label for="hostOutputSelect">Computer speaker</label>
+              <select id="hostOutputSelect"></select>
+            </div>
+            <div>
+              <label for="meeryaInputSelect">Meerya microphone</label>
+              <select id="meeryaInputSelect"></select>
+            </div>
+            <div>
+              <label for="meeryaOutputSelect">Meerya speaker</label>
+              <select id="meeryaOutputSelect"></select>
+            </div>
+            <div>
+              <label for="hostInputSelect">Computer microphone</label>
+              <select id="hostInputSelect"></select>
+            </div>
+          </div>
+          <div class="audio-test-actions">
+            <button id="audioRefreshBtn">Refresh Devices</button>
+            <button id="audioHostToMeeryaBtn">Computer → Meerya Mic</button>
+            <button id="audioMeeryaToHostBtn">Meerya Speaker → Computer</button>
+          </div>
+          <ul class="audio-test-results" id="audioTestResults"></ul>
         </div>
       </section>
 
@@ -496,6 +574,15 @@
       quickTestState: document.getElementById("quickTestState"),
       quickTestResults: document.getElementById("quickTestResults"),
       quickTestLinks: document.getElementById("quickTestLinks"),
+      audioTestState: document.getElementById("audioTestState"),
+      audioTestResults: document.getElementById("audioTestResults"),
+      hostOutputSelect: document.getElementById("hostOutputSelect"),
+      meeryaInputSelect: document.getElementById("meeryaInputSelect"),
+      meeryaOutputSelect: document.getElementById("meeryaOutputSelect"),
+      hostInputSelect: document.getElementById("hostInputSelect"),
+      audioRefreshBtn: document.getElementById("audioRefreshBtn"),
+      audioHostToMeeryaBtn: document.getElementById("audioHostToMeeryaBtn"),
+      audioMeeryaToHostBtn: document.getElementById("audioMeeryaToHostBtn"),
       terminal: document.getElementById("terminal"),
       nativePanel: document.getElementById("nativePanel"),
       nativeBridgeState: document.getElementById("nativeBridgeState"),
@@ -559,6 +646,262 @@
       link.rel = "noopener";
       link.textContent = label;
       els.quickTestLinks.appendChild(link);
+    }
+
+    function setAudioTestState(text) {
+      els.audioTestState.textContent = text;
+    }
+
+    function clearAudioResults() {
+      els.audioTestResults.innerHTML = "";
+    }
+
+    function addAudioResult(label, value) {
+      const item = document.createElement("li");
+      item.innerHTML = `<span>${label}</span><b>${value}</b>`;
+      els.audioTestResults.appendChild(item);
+    }
+
+    function deviceLabel(device) {
+      return device.label || `${device.kind} ${device.deviceId.slice(0, 8)}`;
+    }
+
+    function isMeeryaDevice(device) {
+      return /meerya|uac1|esp32/i.test(deviceLabel(device));
+    }
+
+    function scoreHostDevice(device) {
+      const label = deviceLabel(device).toLowerCase();
+      let score = isMeeryaDevice(device) ? -100 : 0;
+      if (/default|communications/.test(label)) score += 5;
+      if (/built.?in|internal|realtek|high definition|speakers|microphone/.test(label)) score += 10;
+      return score;
+    }
+
+    function pickDevice(devices, kind, picker) {
+      const candidates = devices.filter((device) => device.kind === kind);
+      if (candidates.length === 0) {
+        return "";
+      }
+      return [...candidates].sort((a, b) => picker(b) - picker(a))[0].deviceId;
+    }
+
+    function populateDeviceSelect(select, devices, kind, selectedDeviceId) {
+      select.innerHTML = "";
+      const matching = devices.filter((device) => device.kind === kind);
+      if (matching.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No devices found";
+        select.appendChild(option);
+        return;
+      }
+      matching.forEach((device) => {
+        const option = document.createElement("option");
+        option.value = device.deviceId;
+        option.textContent = deviceLabel(device);
+        select.appendChild(option);
+      });
+      if (selectedDeviceId && matching.some((device) => device.deviceId === selectedDeviceId)) {
+        select.value = selectedDeviceId;
+      }
+    }
+
+    async function refreshAudioDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        throw new Error("This browser does not expose audio devices.");
+      }
+
+      setAudioTestState("Requesting permission");
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+        video: false,
+      });
+      permissionStream.getTracks().forEach((track) => track.stop());
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hostOutput = pickDevice(devices, "audiooutput", scoreHostDevice);
+      const meeryaInput = pickDevice(devices, "audioinput", (device) => isMeeryaDevice(device) ? 100 : 0);
+      const meeryaOutput = pickDevice(devices, "audiooutput", (device) => isMeeryaDevice(device) ? 100 : 0);
+      const hostInput = pickDevice(devices, "audioinput", scoreHostDevice);
+
+      populateDeviceSelect(els.hostOutputSelect, devices, "audiooutput", hostOutput);
+      populateDeviceSelect(els.meeryaInputSelect, devices, "audioinput", meeryaInput);
+      populateDeviceSelect(els.meeryaOutputSelect, devices, "audiooutput", meeryaOutput);
+      populateDeviceSelect(els.hostInputSelect, devices, "audioinput", hostInput);
+      setAudioTestState("Devices ready");
+      appendLog(`Audio smoke test: found ${devices.length} media devices\n`);
+    }
+
+    function generateTestPcm(sampleRate = 48000, durationSeconds = 2.8) {
+      const sampleCount = Math.round(sampleRate * durationSeconds);
+      const pcm = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; ++i) {
+        const t = i / sampleRate;
+        const envelope = Math.min(1, t / 0.08, (durationSeconds - t) / 0.08);
+        const chirpHz = 600 + 1200 * (t / durationSeconds);
+        const marker = Math.sin(2 * Math.PI * 2400 * t) * (t > 0.35 && t < 0.55 ? 0.25 : 0);
+        pcm[i] = envelope * (0.42 * Math.sin(2 * Math.PI * chirpHz * t) + marker);
+      }
+      return { pcm, sampleRate };
+    }
+
+    function wavBlobFromPcm(pcm, sampleRate) {
+      const bytesPerSample = 2;
+      const headerBytes = 44;
+      const buffer = new ArrayBuffer(headerBytes + pcm.length * bytesPerSample);
+      const view = new DataView(buffer);
+      const writeString = (offset, text) => {
+        for (let i = 0; i < text.length; ++i) {
+          view.setUint8(offset + i, text.charCodeAt(i));
+        }
+      };
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + pcm.length * bytesPerSample, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * bytesPerSample, true);
+      view.setUint16(32, bytesPerSample, true);
+      view.setUint16(34, 16, true);
+      writeString(36, "data");
+      view.setUint32(40, pcm.length * bytesPerSample, true);
+      let offset = headerBytes;
+      for (const sample of pcm) {
+        const clamped = Math.max(-1, Math.min(1, sample));
+        view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+        offset += 2;
+      }
+      return new Blob([buffer], { type: "audio/wav" });
+    }
+
+    async function playWavToDevice(blob, outputDeviceId) {
+      const audio = new Audio(URL.createObjectURL(blob));
+      audio.preload = "auto";
+      if (outputDeviceId && typeof audio.setSinkId === "function") {
+        await audio.setSinkId(outputDeviceId);
+      }
+      await audio.play();
+      await new Promise((resolve, reject) => {
+        audio.onended = resolve;
+        audio.onerror = () => reject(new Error("WAV playback failed"));
+      });
+      URL.revokeObjectURL(audio.src);
+    }
+
+    async function capturePcmFromDevice(inputDeviceId, durationMs) {
+      const constraints = {
+        audio: {
+          deviceId: inputDeviceId ? { exact: inputDeviceId } : undefined,
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+        video: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const context = new AudioContext({ sampleRate: 48000 });
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      const chunks = [];
+      processor.onaudioprocess = (event) => {
+        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      };
+      source.connect(processor);
+      processor.connect(context.destination);
+      await delay(durationMs);
+      processor.disconnect();
+      source.disconnect();
+      stream.getTracks().forEach((track) => track.stop());
+      await context.close();
+      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const pcm = new Float32Array(total);
+      let offset = 0;
+      chunks.forEach((chunk) => {
+        pcm.set(chunk, offset);
+        offset += chunk.length;
+      });
+      return { pcm, sampleRate: context.sampleRate };
+    }
+
+    function analyzePcm(pcm) {
+      let sumSq = 0;
+      let peak = 0;
+      let clipped = 0;
+      let zeroCrossings = 0;
+      for (let i = 0; i < pcm.length; ++i) {
+        const sample = pcm[i];
+        const abs = Math.abs(sample);
+        sumSq += sample * sample;
+        peak = Math.max(peak, abs);
+        if (abs > 0.98) clipped += 1;
+        if (i > 0 && Math.sign(sample) !== Math.sign(pcm[i - 1])) zeroCrossings += 1;
+      }
+      const rms = Math.sqrt(sumSq / Math.max(1, pcm.length));
+      return {
+        rms,
+        peak,
+        clippedRatio: clipped / Math.max(1, pcm.length),
+        zeroCrossingRate: zeroCrossings / Math.max(1, pcm.length),
+      };
+    }
+
+    async function runAudioPathTest({ label, outputSelect, inputSelect }) {
+      clearAudioResults();
+      setAudioTestState(label);
+      const { pcm, sampleRate } = generateTestPcm();
+      const wav = wavBlobFromPcm(pcm, sampleRate);
+      const capturePromise = capturePcmFromDevice(inputSelect.value, 4200);
+      await delay(550);
+      await playWavToDevice(wav, outputSelect.value);
+      const capture = await capturePromise;
+      const stats = analyzePcm(capture.pcm);
+      const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
+      const peakDb = 20 * Math.log10(Math.max(stats.peak, 1e-6));
+      const pass = stats.rms > 0.006 && stats.peak > 0.04 && stats.clippedRatio < 0.01;
+      addAudioResult(`${label} RMS`, `${rmsDb.toFixed(1)} dBFS`);
+      addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`);
+      addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`);
+      addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3));
+      addAudioResult(`${label} result`, pass ? "audible capture" : "needs check");
+      setAudioTestState(pass ? "Passed" : "Needs check");
+      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}%\n`);
+      return { pass, stats };
+    }
+
+    async function maybeAutoRunAudioSmokeTest() {
+      try {
+        await refreshAudioDevices();
+        const hasMeeryaMic = Boolean(els.meeryaInputSelect.value);
+        const hasMeeryaSpeaker = Boolean(els.meeryaOutputSelect.value);
+        const hasHostSpeaker = Boolean(els.hostOutputSelect.value);
+        const hasHostMic = Boolean(els.hostInputSelect.value);
+        if (hasHostSpeaker && hasMeeryaMic) {
+          await runAudioPathTest({
+            label: "Computer to Meerya mic",
+            outputSelect: els.hostOutputSelect,
+            inputSelect: els.meeryaInputSelect,
+          });
+        }
+        if (hasMeeryaSpeaker && hasHostMic) {
+          await runAudioPathTest({
+            label: "Meerya speaker to computer",
+            outputSelect: els.meeryaOutputSelect,
+            inputSelect: els.hostInputSelect,
+          });
+        }
+      } catch (error) {
+        setAudioTestState("Manual permission needed");
+        appendLog(`Audio smoke test skipped: ${error.message}\n`);
+      }
     }
 
     function formatHex(address) {
@@ -795,6 +1138,7 @@
       setStatus("Testing", "ready");
       setProgress(100, "Firmware installed. Running post-flash test...");
       await runPostFlashTest(state.target);
+      await maybeAutoRunAudioSmokeTest();
       setStatus("Complete", "done");
       setProgress(100, "Firmware installed. Post-flash test finished.");
       els.disconnectBtn.disabled = false;
@@ -853,6 +1197,17 @@
     els.connectBtn.addEventListener("click", () => connect().catch(handleError));
     els.flashBtn.addEventListener("click", () => flash().catch(handleError));
     els.disconnectBtn.addEventListener("click", () => disconnect().catch(handleError));
+    els.audioRefreshBtn.addEventListener("click", () => refreshAudioDevices().catch(handleError));
+    els.audioHostToMeeryaBtn.addEventListener("click", () => runAudioPathTest({
+      label: "Computer to Meerya mic",
+      outputSelect: els.hostOutputSelect,
+      inputSelect: els.meeryaInputSelect,
+    }).catch(handleError));
+    els.audioMeeryaToHostBtn.addEventListener("click", () => runAudioPathTest({
+      label: "Meerya speaker to computer",
+      outputSelect: els.meeryaOutputSelect,
+      inputSelect: els.hostInputSelect,
+    }).catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
     els.nativeStopBtn.addEventListener("click", () => window.MeeryaNative?.stopNearbyScan());
     els.nativeInvalidateBtn.addEventListener("click", () => window.MeeryaNative?.invalidateNearbySession());
