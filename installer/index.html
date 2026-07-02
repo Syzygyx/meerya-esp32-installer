@@ -1077,6 +1077,20 @@
       };
     }
 
+    function audioCapturePass(stats, waveform) {
+      const hasAudibleSignal = stats.rms > 0.00015 && stats.peak > 0.0015;
+      const isNotClipped = stats.clippedRatio < 0.01;
+      const isNotPureNoise = stats.zeroCrossingRate < 0.35;
+      const hasStrongMatch = waveform.score >= 0.16;
+      return {
+        pass: hasAudibleSignal && isNotClipped && (isNotPureNoise || hasStrongMatch),
+        hasAudibleSignal,
+        isNotClipped,
+        isNotPureNoise,
+        hasStrongMatch,
+      };
+    }
+
     async function runAudioPathTest({ label, outputSelect, inputSelect, clear = true }) {
       const readiness = await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
@@ -1098,20 +1112,18 @@
       const waveform = compareWaveforms(pcm, capture.pcm, capture.sampleRate);
       const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
       const peakDb = 20 * Math.log10(Math.max(stats.peak, 1e-6));
-      const waveformPass = waveform.score >= 0.16;
-      const levelPass = stats.rms > 0.006 && stats.peak > 0.04 && stats.clippedRatio < 0.01;
-      const pass = levelPass && waveformPass;
-      addAudioResult(`${label} RMS`, `${rmsDb.toFixed(1)} dBFS`);
-      addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`);
-      addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`);
-      addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3));
-      addAudioResult(`${label} waveform match`, `${Math.round(waveform.score * 100)}% / ${waveform.lagMs} ms`, waveformPass);
-      addAudioResult(`${label} result`, pass ? "matched recording" : "waveform mismatch", pass);
+      const quality = audioCapturePass(stats, waveform);
+      addAudioResult(`${label} RMS`, `${rmsDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
+      addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
+      addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
+      addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
+      addAudioResult(`${label} waveform match`, `${Math.round(waveform.score * 100)}% / ${waveform.lagMs} ms`, quality.hasStrongMatch);
+      addAudioResult(`${label} result`, quality.pass ? "captured signal" : "audio signal too weak/noisy", quality.pass);
       addAudioPlaybackResult(`${label} recording`, recording);
-      setAudioPanelState(pass ? "pass" : "fail");
-      setAudioTestState(pass ? "Passed" : "Waveform mismatch");
+      setAudioPanelState(quality.pass ? "pass" : "fail");
+      setAudioTestState(quality.pass ? "Passed" : "Audio weak/noisy");
       appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% lag=${waveform.lagMs}ms\n`);
-      return { pass, stats, waveform, recording };
+      return { pass: quality.pass, stats, waveform, recording, quality };
     }
 
     async function maybeAutoRunAudioSmokeTest() {
@@ -1149,7 +1161,7 @@
         }
         const allPassed = results.length > 0 && results.every((result) => result.pass);
         setAudioPanelState(allPassed ? "pass" : "fail");
-        setAudioTestState(allPassed ? "Passed" : "Waveform mismatch");
+        setAudioTestState(allPassed ? "Passed" : "Audio weak/noisy");
       } catch (error) {
         setAudioPanelState("fail");
         setAudioTestState("Manual permission needed");

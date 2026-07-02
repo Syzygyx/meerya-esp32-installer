@@ -1,11 +1,11 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-02T18:22:38Z",
+  "generatedAt": "2026-07-02T18:33:50Z",
   "gitHead": "b23e1ea63353",
-  "defaultTarget": "waveshare-audio-board-uac-camera",
+  "defaultTarget": "waveshare-audio-board-uac1-audio",
   "targets": [
     {
-      "id": "waveshare-audio-board-uac-camera",
+      "id": "waveshare-audio-board-uac1-audio",
       "name": "Waveshare ESP32-S3 Audio Board - Windows UAC1 Duplex Audio",
       "chip": "esp32s3",
       "baudRate": 460800,
@@ -14,34 +14,48 @@
       "flashSize": "16MB",
       "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer firmware. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 10 ms USB microphone IN packets, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
       "status": "ci-built-current-main",
+      "quickTest": {
+        "statusUrls": [
+          "http://meerya.local/api/status",
+          "http://meerya.lan/api/status",
+          "http://192.168.4.1/api/status"
+        ],
+        "appUrls": [
+          "http://meerya.local/app",
+          "http://meerya.lan/app",
+          "http://192.168.4.1/app"
+        ],
+        "cameraPath": "/camera.jpg",
+        "cameraExpected": false
+      },
       "files": [
         {
           "address": 0,
-          "path": "firmware/waveshare-audio-board-uac-camera/bootloader.bin",
+          "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "a364583bae14474e32b0f666b4f62e0095014faceb6f52147e608e0abf919f03"
+          "sha256": "dae8cc823b83cf3c69504bb9cbc437edc5c84dc640357e2e14fa86c2d995b836"
         },
         {
           "address": 32768,
-          "path": "firmware/waveshare-audio-board-uac-camera/partition-table.bin",
+          "path": "firmware/waveshare-audio-board-uac1-audio/partition-table.bin",
           "label": "Partition table",
           "size": 3072,
           "sha256": "88838bd8f9221557dbb85c08036f5e4bc0d4bbb2a585d9309b2dafc666ceee62"
         },
         {
           "address": 61440,
-          "path": "firmware/waveshare-audio-board-uac-camera/ota_data_initial.bin",
+          "path": "firmware/waveshare-audio-board-uac1-audio/ota_data_initial.bin",
           "label": "OTA data",
           "size": 8192,
           "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
         },
         {
           "address": 131072,
-          "path": "firmware/waveshare-audio-board-uac-camera/meerya_esp32.bin",
+          "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
-          "size": 1356768,
-          "sha256": "4429825d95711f34e2788f203ace5f18a0df867516f788d7781e5e4dc221c59e"
+          "size": 1357840,
+          "sha256": "81f7499ecde6f29af8ad62546cb035f190fe92f3c91619f0d354b699b58204b4"
         }
       ]
     }
