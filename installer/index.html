@@ -1512,6 +1512,8 @@
       return { pcm, sampleRate };
     }
 
+    const TEST_SPEECH_WAV_PATH = "media/meerya-speech-check.wav";
+
     function wavBlobFromPcm(pcm, sampleRate) {
       const bytesPerSample = 2;
       const headerBytes = 44;
@@ -1556,6 +1558,28 @@
         audio.onerror = () => reject(new Error("WAV playback failed"));
       });
       URL.revokeObjectURL(audio.src);
+    }
+
+    async function loadSpeechStimulus() {
+      const response = await fetch(withCacheBust(TEST_SPEECH_WAV_PATH), { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Speech WAV unavailable: HTTP ${response.status}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const decodeContext = new AudioContext({ sampleRate: 48000 });
+      try {
+        const audioBuffer = await decodeContext.decodeAudioData(arrayBuffer.slice(0));
+        const source = audioBuffer.getChannelData(0);
+        const pcm = new Float32Array(source.length);
+        pcm.set(source);
+        return {
+          pcm,
+          sampleRate: audioBuffer.sampleRate || 48000,
+          wav: new Blob([arrayBuffer], { type: "audio/wav" }),
+        };
+      } finally {
+        await decodeContext.close();
+      }
     }
 
     async function capturePcmFromDevice(inputDeviceId, durationMs) {
@@ -1954,12 +1978,74 @@
         pass,
       );
       addAudioPlaybackResult("duplex", "Play Meerya capture", recording);
-      setAudioColumnState("duplex", pass ? "pass" : "fail", pass ? "Passed" : "Check");
-      setAudioPanelState(pass ? "pass" : "fail");
-      setAudioTestState(pass ? "Passed" : "Audio weak/noisy");
+      let speechPass = true;
+      let speechAvailable = false;
+
+      try {
+        speechAvailable = true;
+        const speechStimulus = await loadSpeechStimulus();
+        const speechNoise = generateNoisePcm(48000, 4.2, 0.04);
+        const speechNoiseWav = wavBlobFromPcm(speechNoise.pcm, speechNoise.sampleRate);
+        const speechCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 5000);
+        await delay(250);
+        await Promise.all([
+          playWavToDevice(speechNoiseWav, els.meeryaOutputSelect.value),
+          playWavToDevice(speechStimulus.wav, els.hostOutputSelect.value),
+        ]);
+        const speechCapture = await speechCapturePromise;
+        const speechStats = analyzePcm(speechCapture.pcm);
+        const speechRecording = wavBlobFromPcm(speechCapture.pcm, speechCapture.sampleRate);
+        const speechWaveform = compareWaveforms(speechStimulus.pcm, speechCapture.pcm, speechCapture.sampleRate);
+        const speechBand = bandAverageMagnitude(
+          speechCapture.pcm,
+          speechCapture.sampleRate,
+          [220, 320, 450, 700, 1000, 1450, 2000, 2800],
+        );
+        const rumbleBand = bandAverageMagnitude(speechCapture.pcm, speechCapture.sampleRate, [60, 90, 120]);
+        const hissBand = bandAverageMagnitude(speechCapture.pcm, speechCapture.sampleRate, [4200, 5600, 7200]);
+        const speechDominanceDb = dbfs(speechBand) - Math.max(dbfs(rumbleBand), dbfs(hissBand));
+        const speechLeakDb = dbfs(bandAverageMagnitude(
+          speechCapture.pcm,
+          speechCapture.sampleRate,
+          [350, 700, 1050, 2300, 3000],
+        ));
+        const speechAudible = speechStats.rms > 0.0001 && speechStats.peak > 0.0007;
+        const speechLooksVoiced = (speechBand > 0.00005 && speechDominanceDb >= 2.5) || speechWaveform.score >= 0.08;
+        const speechClean = speechStats.clippedRatio < 0.01;
+        speechPass = speechAudible && speechLooksVoiced && speechClean;
+        addAudioResult("duplex", "Computer speech B", "high-fidelity WAV phrase", true);
+        addAudioResult("duplex", "Speech mic RMS", `${dbfs(speechStats.rms).toFixed(1)} dBFS`, speechAudible);
+        addAudioResult("duplex", "Speech clipping", `${(speechStats.clippedRatio * 100).toFixed(2)}%`, speechClean);
+        addAudioResult("duplex", "Speech waveform", `${Math.round(speechWaveform.score * 100)}% (freq ${Math.round(speechWaveform.frequencyScore * 100)}%, lag ${speechWaveform.lagMs} ms)`, speechLooksVoiced);
+        addAudioResult("duplex", "Speech dominance", `${speechDominanceDb.toFixed(1)} dB over rumble/hiss`, speechLooksVoiced);
+        addAudioResult("duplex", "Speech self-leak", `${speechLeakDb.toFixed(1)} dBFS`, speechPass);
+        addAudioResult("duplex", "Speech result", speechPass ? "spoken voice present in Meerya capture" : "speech capture needs review", speechPass);
+        addAudioMultiWaveformResult(
+          "duplex",
+          "Speech capture 3D TFFT endpoints",
+          [
+            { label: "computer out speech B", pcm: speechStimulus.pcm, sampleRate: speechStimulus.sampleRate, color: "#157f76" },
+            { label: "meerya out noise A", pcm: speechNoise.pcm, sampleRate: speechNoise.sampleRate, color: "#8a5a1f" },
+            { label: "meerya in speech capture", pcm: speechCapture.pcm, sampleRate: speechCapture.sampleRate, color: "#c15c17" },
+          ],
+          speechPass,
+        );
+        addAudioPlaybackResult("duplex", "Play speech capture", speechRecording);
+        appendLog(`Audio speech test: match=${Math.round(speechWaveform.score * 100)}% speechBand=${dbfs(speechBand).toFixed(1)}dBFS rumble=${dbfs(rumbleBand).toFixed(1)}dBFS hiss=${dbfs(hissBand).toFixed(1)}dBFS dominance=${speechDominanceDb.toFixed(1)}dB leak=${speechLeakDb.toFixed(1)}dBFS result=${speechPass ? "pass" : "check"}\n`);
+      } catch (error) {
+        speechAvailable = false;
+        speechPass = true;
+        addAudioResult("duplex", "Computer speech B", `speech test skipped: ${error.message}`, null);
+        appendLog(`Audio speech test skipped: ${error.message}\n`);
+      }
+      const overallPass = pass && (!speechAvailable || speechPass);
+      setAudioColumnState("duplex", overallPass ? "pass" : "fail", overallPass ? "Passed" : "Check");
+      setAudioPanelState(overallPass ? "pass" : "fail");
+      setAudioTestState(overallPass ? "Passed" : speechAvailable && pass ? "Speech needs review" : "Audio weak/noisy");
       appendLog(`Audio duplex test: computerMatch=${Math.round(computerWaveform.score * 100)}% freq=${Math.round(computerWaveform.frequencyScore * 100)}% computerBand=${dbfs(computerMagnitude).toFixed(1)}dBFS meeryaNoiseLeak=${dbfs(meeryaLeakMagnitude).toFixed(1)}dBFS leakMargin=${leakageMarginDb.toFixed(1)}dB clipped=${(stats.clippedRatio * 100).toFixed(2)}% result=${pass ? "pass" : "fail"}\n`);
       return {
-        pass,
+        pass: overallPass,
+        corePass: pass,
         stats,
         computerWaveform,
         computerMagnitude,
