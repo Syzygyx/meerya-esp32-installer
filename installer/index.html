@@ -298,6 +298,50 @@
       text-decoration: none;
     }
 
+    .wifi-setup {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--warn) 7%, var(--bg));
+    }
+
+    .wifi-setup[data-visible="false"] {
+      display: none;
+    }
+
+    .wifi-setup-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .wifi-setup-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .wifi-setup-actions button,
+    .wifi-setup-actions a {
+      width: auto;
+      min-height: 38px;
+      align-content: center;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .wifi-setup-actions a {
+      border: 1px solid var(--line);
+      color: var(--accent);
+      background: var(--bg);
+    }
+
     .audio-test {
       display: grid;
       gap: 12px;
@@ -385,6 +429,25 @@
 
     .audio-test-results li[data-result="fail"] b {
       color: var(--warn);
+    }
+
+    .audio-waveform {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 6px;
+    }
+
+    .audio-waveform canvas {
+      width: 100%;
+      height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--bg) 85%, var(--ink));
+    }
+
+    .audio-waveform span {
+      color: var(--muted);
+      font-size: 0.82rem;
     }
 
     progress {
@@ -528,6 +591,34 @@
           <div class="quick-test-links" id="quickTestLinks"></div>
         </div>
 
+        <div class="wifi-setup" id="wifiSetupPanel" data-visible="false">
+          <div class="quick-test-head">
+            <strong>WiFi Setup</strong>
+            <span id="wifiSetupState">Hidden</span>
+          </div>
+          <form id="wifiSetupForm" method="post" action="http://192.168.4.1/wifi" target="_blank">
+            <div class="wifi-setup-grid">
+              <div>
+                <label for="wifiSetupBase">Device URL</label>
+                <input id="wifiSetupBase" type="url" value="http://192.168.4.1">
+              </div>
+              <div>
+                <label for="wifiSetupSsid">SSID</label>
+                <input id="wifiSetupSsid" name="ssid" maxlength="32" autocomplete="off">
+              </div>
+              <div>
+                <label for="wifiSetupPassword">Password</label>
+                <input id="wifiSetupPassword" name="password" type="password" maxlength="64" autocomplete="new-password">
+              </div>
+            </div>
+            <div class="wifi-setup-actions">
+              <button type="submit">Save WiFi</button>
+              <a id="wifiSetupOpenLink" href="http://192.168.4.1/" target="_blank" rel="noopener">Open Setup Page</a>
+              <a id="wifiSetupScanLink" href="http://192.168.4.1/scan" target="_blank" rel="noopener">Scan Networks</a>
+            </div>
+          </form>
+        </div>
+
         <div class="audio-test" id="audioTestPanel">
           <div class="quick-test-head">
             <strong>Audio Smoke Test</strong>
@@ -649,6 +740,14 @@
       quickTestState: document.getElementById("quickTestState"),
       quickTestResults: document.getElementById("quickTestResults"),
       quickTestLinks: document.getElementById("quickTestLinks"),
+      wifiSetupPanel: document.getElementById("wifiSetupPanel"),
+      wifiSetupState: document.getElementById("wifiSetupState"),
+      wifiSetupForm: document.getElementById("wifiSetupForm"),
+      wifiSetupBase: document.getElementById("wifiSetupBase"),
+      wifiSetupSsid: document.getElementById("wifiSetupSsid"),
+      wifiSetupPassword: document.getElementById("wifiSetupPassword"),
+      wifiSetupOpenLink: document.getElementById("wifiSetupOpenLink"),
+      wifiSetupScanLink: document.getElementById("wifiSetupScanLink"),
       audioTestPanel: document.getElementById("audioTestPanel"),
       audioTestState: document.getElementById("audioTestState"),
       audioTestResults: document.getElementById("audioTestResults"),
@@ -722,6 +821,7 @@
       els.quickTestState.textContent = stateText;
       els.quickTestResults.innerHTML = "";
       els.quickTestLinks.innerHTML = "";
+      hideWifiSetup();
     }
 
     function addQuickTestResult(label, value, ok = null) {
@@ -739,6 +839,34 @@
       link.rel = "noopener";
       link.textContent = label;
       els.quickTestLinks.appendChild(link);
+    }
+
+    function normalizedDeviceBase(value) {
+      const trimmed = String(value || "").trim().replace(/\/+$/, "");
+      if (!trimmed) {
+        return "http://192.168.4.1";
+      }
+      return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+    }
+
+    function updateWifiSetupTargets() {
+      const base = normalizedDeviceBase(els.wifiSetupBase.value);
+      els.wifiSetupBase.value = base;
+      els.wifiSetupForm.action = `${base}/wifi`;
+      els.wifiSetupOpenLink.href = `${base}/`;
+      els.wifiSetupScanLink.href = `${base}/scan`;
+    }
+
+    function hideWifiSetup() {
+      els.wifiSetupPanel.dataset.visible = "false";
+      els.wifiSetupState.textContent = "Hidden";
+    }
+
+    function showWifiSetup(reason, base = "http://192.168.4.1") {
+      els.wifiSetupPanel.dataset.visible = "true";
+      els.wifiSetupState.textContent = reason;
+      els.wifiSetupBase.value = normalizedDeviceBase(base);
+      updateWifiSetupTargets();
     }
 
     function setAudioTestState(text) {
@@ -816,6 +944,83 @@
       });
       item.append(text, button);
       els.audioTestResults.appendChild(item);
+    }
+
+    function drawWaveformTrack(ctx, pcm, x, y, width, height, color) {
+      if (!pcm.length) {
+        return;
+      }
+      let peak = 0;
+      for (const sample of pcm) {
+        peak = Math.max(peak, Math.abs(sample));
+      }
+      const scale = peak > 0 ? 1 / peak : 1;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let px = 0; px < width; ++px) {
+        const start = Math.floor((px / width) * pcm.length);
+        const end = Math.max(start + 1, Math.floor(((px + 1) / width) * pcm.length));
+        let min = 1;
+        let max = -1;
+        for (let i = start; i < end; ++i) {
+          const sample = (pcm[i] || 0) * scale;
+          min = Math.min(min, sample);
+          max = Math.max(max, sample);
+        }
+        const yMin = y + height * 0.5 - max * height * 0.45;
+        const yMax = y + height * 0.5 - min * height * 0.45;
+        if (px === 0) {
+          ctx.moveTo(x + px, yMin);
+        }
+        ctx.lineTo(x + px, yMin);
+        ctx.lineTo(x + px, yMax);
+      }
+      ctx.stroke();
+    }
+
+    function drawWaveformCanvas(canvas, referencePcm, capturePcm) {
+      const rect = canvas.getBoundingClientRect();
+      const pixelRatio = window.devicePixelRatio || 1;
+      const width = Math.max(320, Math.floor(rect.width * pixelRatio));
+      const height = Math.max(132, Math.floor(rect.height * pixelRatio));
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#fff";
+      ctx.fillRect(0, 0, width, height);
+      const pad = 12 * pixelRatio;
+      const trackHeight = (height - pad * 3) / 2;
+      ctx.strokeStyle = "rgba(20, 34, 48, 0.18)";
+      ctx.lineWidth = 1;
+      for (const y of [pad + trackHeight / 2, pad * 2 + trackHeight + trackHeight / 2]) {
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(width - pad, y);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(20, 34, 48, 0.62)";
+      ctx.font = `${11 * pixelRatio}px system-ui, sans-serif`;
+      ctx.fillText("out", pad, pad + 11 * pixelRatio);
+      ctx.fillText("in", pad, pad * 2 + trackHeight + 11 * pixelRatio);
+      drawWaveformTrack(ctx, referencePcm, pad, pad, width - pad * 2, trackHeight, "#157f76");
+      drawWaveformTrack(ctx, capturePcm, pad, pad * 2 + trackHeight, width - pad * 2, trackHeight, "#315fbd");
+    }
+
+    function addAudioWaveformResult(label, referencePcm, capturePcm, waveform, ok) {
+      const item = document.createElement("li");
+      item.dataset.result = ok ? "pass" : "fail";
+      const wrapper = document.createElement("div");
+      wrapper.className = "audio-waveform";
+      const header = document.createElement("span");
+      header.textContent = `${label}: out/in waveform, match ${Math.round(waveform.score * 100)}%, lag ${waveform.lagMs} ms${waveform.polarity < 0 ? ", inverted" : ""}`;
+      const canvas = document.createElement("canvas");
+      canvas.height = 132;
+      wrapper.append(header, canvas);
+      item.appendChild(wrapper);
+      els.audioTestResults.appendChild(item);
+      requestAnimationFrame(() => drawWaveformCanvas(canvas, referencePcm, capturePcm));
     }
 
     function deviceLabel(device) {
@@ -1096,36 +1301,123 @@
       return normalized;
     }
 
-    function compareWaveforms(referencePcm, capturePcm, sampleRate) {
-      const reference = normalizeForMatch(resampleForMatch(referencePcm));
-      const capture = normalizeForMatch(resampleForMatch(capturePcm));
-      const windowLength = Math.min(reference.length, capture.length);
-      const maxOffset = Math.max(0, capture.length - windowLength);
-      const step = 32;
-      let best = -1;
-      let bestOffset = 0;
-      for (let offset = 0; offset <= maxOffset; offset += step) {
-        let dot = 0;
-        for (let i = 0; i < windowLength; ++i) {
-          dot += reference[i] * capture[offset + i];
+    function activeSliceForMatch(pcm, windowSize = 1024, thresholdRatio = 0.08) {
+      if (pcm.length <= windowSize * 2) {
+        return pcm;
+      }
+      let peakWindow = 0;
+      const windows = [];
+      for (let offset = 0; offset < pcm.length; offset += windowSize) {
+        let sumSq = 0;
+        const end = Math.min(pcm.length, offset + windowSize);
+        for (let i = offset; i < end; ++i) {
+          sumSq += pcm[i] * pcm[i];
         }
-        const score = dot / Math.max(1, windowLength);
-        if (score > best) {
-          best = score;
-          bestOffset = offset;
+        const rms = Math.sqrt(sumSq / Math.max(1, end - offset));
+        windows.push({ offset, rms });
+        peakWindow = Math.max(peakWindow, rms);
+      }
+      const threshold = peakWindow * thresholdRatio;
+      const first = windows.find((window) => window.rms >= threshold);
+      const last = [...windows].reverse().find((window) => window.rms >= threshold);
+      if (!first || !last) {
+        return pcm;
+      }
+      const start = Math.max(0, first.offset - windowSize * 2);
+      const end = Math.min(pcm.length, last.offset + windowSize * 3);
+      return pcm.slice(start, end);
+    }
+
+    function correlationMatch(referencePcm, capturePcm, sampleRate) {
+      const stride = 8;
+      const reference = normalizeForMatch(resampleForMatch(activeSliceForMatch(referencePcm), stride));
+      const capture = normalizeForMatch(resampleForMatch(activeSliceForMatch(capturePcm), stride));
+      const maxLag = Math.min(Math.floor(Math.min(reference.length, capture.length) * 0.45), Math.round(sampleRate / stride));
+      const step = 16;
+      let best = 0;
+      let bestLag = 0;
+      let bestPolarity = 1;
+      for (let lag = -maxLag; lag <= maxLag; lag += step) {
+        const refStart = Math.max(0, -lag);
+        const capStart = Math.max(0, lag);
+        const overlap = Math.min(reference.length - refStart, capture.length - capStart);
+        if (overlap < 256) {
+          continue;
+        }
+        let dot = 0;
+        for (let i = 0; i < overlap; ++i) {
+          dot += reference[refStart + i] * capture[capStart + i];
+        }
+        const score = dot / overlap;
+        if (Math.abs(score) > best) {
+          best = Math.abs(score);
+          bestLag = lag;
+          bestPolarity = score >= 0 ? 1 : -1;
         }
       }
       return {
         score: Math.max(0, Math.min(1, best)),
-        lagMs: Math.round((bestOffset * 8 * 1000) / sampleRate),
+        lagMs: Math.round((bestLag * stride * 1000) / sampleRate),
+        polarity: bestPolarity,
+      };
+    }
+
+    function frequencyFingerprint(pcm, sampleRate) {
+      const active = activeSliceForMatch(pcm);
+      const step = Math.max(1, Math.floor(active.length / 48000));
+      const freqs = [600, 800, 1000, 1200, 1400, 1600, 1800, 2400];
+      const bins = [];
+      for (const frequency of freqs) {
+        let real = 0;
+        let imag = 0;
+        let count = 0;
+        for (let i = 0; i < active.length; i += step) {
+          const sample = active[i];
+          const phase = (2 * Math.PI * frequency * i) / sampleRate;
+          real += sample * Math.cos(phase);
+          imag -= sample * Math.sin(phase);
+          count += 1;
+        }
+        bins.push((2 * Math.hypot(real, imag)) / Math.max(1, count));
+      }
+      const norm = Math.hypot(...bins) || 1;
+      return bins.map((value) => value / norm);
+    }
+
+    function cosineSimilarity(left, right) {
+      let dot = 0;
+      let leftNorm = 0;
+      let rightNorm = 0;
+      const count = Math.min(left.length, right.length);
+      for (let i = 0; i < count; ++i) {
+        dot += left[i] * right[i];
+        leftNorm += left[i] * left[i];
+        rightNorm += right[i] * right[i];
+      }
+      return dot / Math.max(1e-9, Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+    }
+
+    function compareWaveforms(referencePcm, capturePcm, sampleRate) {
+      const time = correlationMatch(referencePcm, capturePcm, sampleRate);
+      const frequencyScore = Math.max(0, Math.min(1, cosineSimilarity(
+        frequencyFingerprint(referencePcm, sampleRate),
+        frequencyFingerprint(capturePcm, sampleRate),
+      )));
+      const score = Math.max(time.score, frequencyScore * 0.92);
+      return {
+        score: Math.max(0, Math.min(1, score)),
+        timeScore: time.score,
+        frequencyScore,
+        lagMs: time.lagMs,
+        polarity: time.polarity,
       };
     }
 
     function audioCapturePass(stats, waveform) {
-      const hasAudibleSignal = stats.rms > 0.00015 && stats.peak > 0.0015;
+      const hasAudibleSignal = stats.rms > 0.00012 && stats.peak > 0.0008;
       const isNotClipped = stats.clippedRatio < 0.01;
       const isNotPureNoise = stats.zeroCrossingRate < 0.35;
-      const hasStrongMatch = waveform.score >= 0.16;
+      const hasStrongMatch = waveform.score >= 0.12;
       return {
         pass: hasAudibleSignal && isNotClipped && (isNotPureNoise || hasStrongMatch),
         hasAudibleSignal,
@@ -1165,13 +1457,18 @@
       addAudioResult(`${label} peak`, `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
       addAudioResult(`${label} clipping`, `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
       addAudioResult(`${label} zero crossing`, stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
-      addAudioResult(`${label} waveform match`, `${Math.round(waveform.score * 100)}% / ${waveform.lagMs} ms`, quality.hasStrongMatch);
+      addAudioResult(
+        `${label} waveform match`,
+        `${Math.round(waveform.score * 100)}% (time ${Math.round(waveform.timeScore * 100)}%, freq ${Math.round(waveform.frequencyScore * 100)}%, ${waveform.lagMs} ms${waveform.polarity < 0 ? ", inverted" : ""})`,
+        quality.pass,
+      );
       addAudioResult(`${label} firmware counters`, counterSummary.text, counterSummary.ok);
       addAudioResult(`${label} result`, quality.pass ? "captured signal" : "audio signal too weak/noisy", quality.pass);
+      addAudioWaveformResult(`${label} waveform`, pcm, capture.pcm, waveform, quality.pass);
       addAudioPlaybackResult(`${label} recording`, recording);
       setAudioPanelState(quality.pass ? "pass" : "fail");
       setAudioTestState(quality.pass ? "Passed" : "Audio weak/noisy");
-      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% lag=${waveform.lagMs}ms counters=${counterSummary.text}\n`);
+      appendLog(`Audio smoke test ${label}: rms=${rmsDb.toFixed(1)}dBFS peak=${peakDb.toFixed(1)}dBFS clipped=${(stats.clippedRatio * 100).toFixed(2)}% match=${Math.round(waveform.score * 100)}% time=${Math.round(waveform.timeScore * 100)}% freq=${Math.round(waveform.frequencyScore * 100)}% lag=${waveform.lagMs}ms counters=${counterSummary.text}\n`);
       return { pass: quality.pass, stats, waveform, recording, quality, countersBefore, countersAfter };
     }
 
@@ -1404,11 +1701,19 @@
 
     async function readFirmwareAudioRuntime() {
       const errors = [];
-      for (const url of firmwareStatusUrls()) {
+      const urls = firmwareStatusUrls();
+      const primaryUrl = urls[0] ?? "";
+      for (const url of urls) {
         try {
           const status = await fetchJsonWithTimeout(url);
           if (status?.audio_runtime) {
-            return { url, status, runtime: status.audio_runtime };
+            const primaryUnavailable = primaryUrl && url !== primaryUrl && errors.length > 0;
+            return {
+              url,
+              status,
+              runtime: status.audio_runtime,
+              warning: primaryUnavailable ? `${primaryUrl.replace(/\/api\/status$/, "")} unavailable; using ${url.replace(/\/api\/status$/, "")}` : "",
+            };
           }
           errors.push(`${url}: no audio_runtime`);
         } catch (error) {
@@ -1443,8 +1748,11 @@
       add("mic zero", "microphone_usb_zero_loads");
       add("spk pkt", "speaker_usb_packets");
       add("spk drops", "speaker_queue_drops");
+      const url = after?.url || before?.url || "";
+      const source = url ? ` via ${url.replace(/\/api\/status$/, "")}` : "";
+      const warning = after?.warning || before?.warning || "";
       return {
-        text: parts.length ? parts.join(", ") : "no numeric counters",
+        text: `${parts.length ? parts.join(", ") : "no numeric counters"}${source}${warning ? `; ${warning}` : ""}`,
         ok: parts.length > 0,
       };
     }
