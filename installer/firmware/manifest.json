@@ -1,6 +1,6 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-02T16:35:07Z",
+  "generatedAt": "2026-07-02T16:40:24Z",
   "gitHead": "195444d229f6",
   "defaultTarget": "waveshare-audio-board-uac-camera",
   "targets": [
@@ -14,6 +14,20 @@
       "flashSize": "16MB",
       "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer firmware. USB product \"Meerya UAC1 48k Mono Camera\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 10 ms USB microphone IN packets, macOS feedback profile enabled. Camera enabled; CDC serial disabled; HID control disabled.",
       "status": "ci-built-current-main",
+      "quickTest": {
+        "statusUrls": [
+          "http://meerya.local/api/status",
+          "http://meerya.lan/api/status",
+          "http://192.168.4.1/api/status"
+        ],
+        "appUrls": [
+          "http://meerya.local/app",
+          "http://meerya.lan/app",
+          "http://192.168.4.1/app"
+        ],
+        "cameraPath": "/camera.jpg",
+        "cameraExpected": true
+      },
       "files": [
         {
           "address": 0,

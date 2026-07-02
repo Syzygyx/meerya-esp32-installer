@@ -210,6 +210,77 @@
       margin-top: 16px;
     }
 
+    .quick-test {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+
+    .quick-test[data-state="pass"] {
+      border-color: color-mix(in srgb, var(--ok) 60%, var(--line));
+    }
+
+    .quick-test[data-state="fail"] {
+      border-color: color-mix(in srgb, var(--warn) 70%, var(--line));
+    }
+
+    .quick-test-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .quick-test-head strong {
+      font-size: 0.95rem;
+    }
+
+    .quick-test-head span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .quick-test-results {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .quick-test-results li {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      padding-top: 6px;
+    }
+
+    .quick-test-results b {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .quick-test-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.9rem;
+    }
+
+    .quick-test-links a {
+      color: var(--accent);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
     progress {
       width: 100%;
       height: 16px;
@@ -333,6 +404,15 @@
           <progress id="progress" value="0" max="100"></progress>
           <p id="progressText">Waiting for a board.</p>
         </div>
+
+        <div class="quick-test" id="quickTestPanel" data-state="idle">
+          <div class="quick-test-head">
+            <strong>Post-Flash Test</strong>
+            <span id="quickTestState">Not run</span>
+          </div>
+          <ul class="quick-test-results" id="quickTestResults"></ul>
+          <div class="quick-test-links" id="quickTestLinks"></div>
+        </div>
       </section>
 
       <aside class="note">
@@ -412,6 +492,10 @@
       eraseAll: document.getElementById("eraseAll"),
       progress: document.getElementById("progress"),
       progressText: document.getElementById("progressText"),
+      quickTestPanel: document.getElementById("quickTestPanel"),
+      quickTestState: document.getElementById("quickTestState"),
+      quickTestResults: document.getElementById("quickTestResults"),
+      quickTestLinks: document.getElementById("quickTestLinks"),
       terminal: document.getElementById("terminal"),
       nativePanel: document.getElementById("nativePanel"),
       nativeBridgeState: document.getElementById("nativeBridgeState"),
@@ -453,6 +537,30 @@
       els.progressText.textContent = text;
     }
 
+    function resetQuickTest(stateText = "Not run", stateName = "idle") {
+      els.quickTestPanel.dataset.state = stateName;
+      els.quickTestState.textContent = stateText;
+      els.quickTestResults.innerHTML = "";
+      els.quickTestLinks.innerHTML = "";
+    }
+
+    function addQuickTestResult(label, value, ok = null) {
+      const item = document.createElement("li");
+      const result = ok === true ? "pass" : ok === false ? "check" : "info";
+      item.innerHTML = `<span>${label}</span><b>${value}</b>`;
+      item.dataset.result = result;
+      els.quickTestResults.appendChild(item);
+    }
+
+    function addQuickTestLink(label, href) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = label;
+      els.quickTestLinks.appendChild(link);
+    }
+
     function formatHex(address) {
       return `0x${Number(address).toString(16)}`;
     }
@@ -480,6 +588,7 @@
         els.fileList.appendChild(row);
       });
       appendLog(`Selected ${target.name}\n`);
+      resetQuickTest();
     }
 
     async function loadManifest() {
@@ -555,6 +664,108 @@
       return files;
     }
 
+    function delay(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function probeOpaqueUrl(url, timeoutMs) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
+          cache: "no-store",
+          mode: "no-cors",
+          signal: controller.signal,
+        });
+        return true;
+      } catch (error) {
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function loadImage(url, timeoutMs) {
+      return new Promise((resolve) => {
+        const image = new Image();
+        const timeout = setTimeout(() => {
+          image.onload = null;
+          image.onerror = null;
+          resolve(false);
+        }, timeoutMs);
+        image.onload = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        image.onerror = () => {
+          clearTimeout(timeout);
+          resolve(false);
+        };
+        image.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+      });
+    }
+
+    async function runPostFlashTest(target) {
+      const quickTest = target.quickTest ?? {};
+      const statusUrls = quickTest.statusUrls ?? ["http://meerya.local/api/status", "http://192.168.4.1/api/status"];
+      const appUrls = quickTest.appUrls ?? ["http://meerya.local/app", "http://192.168.4.1/app"];
+      const cameraExpected = Boolean(quickTest.cameraExpected);
+      const cameraPath = quickTest.cameraPath ?? "/camera.jpg";
+
+      resetQuickTest("Waiting for reboot", "idle");
+      appendLog("Post-flash test: waiting for Meerya to reboot...\n");
+      await delay(6000);
+
+      els.quickTestState.textContent = "Checking status";
+      let reachableBase = null;
+      for (let attempt = 0; attempt < 8 && reachableBase === null; ++attempt) {
+        for (const url of statusUrls) {
+          appendLog(`Post-flash test: probing ${url}\n`);
+          if (await probeOpaqueUrl(url, 2200)) {
+            reachableBase = url.replace(/\/api\/status$/, "");
+            break;
+          }
+        }
+        if (reachableBase === null) {
+          await delay(2500);
+        }
+      }
+
+      if (reachableBase === null) {
+        addQuickTestResult("Meerya status", "not reachable", false);
+        els.quickTestPanel.dataset.state = "fail";
+        els.quickTestState.textContent = "Needs manual check";
+        appendLog("Post-flash test: status not reachable from this browser. Chrome may be blocking local HTTP from GitHub Pages.\n");
+      } else {
+        addQuickTestResult("Meerya status", reachableBase, true);
+        els.quickTestPanel.dataset.state = "pass";
+        els.quickTestState.textContent = "Status reachable";
+        appendLog(`Post-flash test: status reachable at ${reachableBase}\n`);
+      }
+
+      if (cameraExpected) {
+        els.quickTestState.textContent = reachableBase ? "Checking camera" : "Checking camera fallback";
+        let cameraOk = false;
+        const cameraBases = reachableBase ? [reachableBase] : statusUrls.map((url) => url.replace(/\/api\/status$/, ""));
+        for (const base of cameraBases) {
+          const cameraUrl = `${base}${cameraPath}`;
+          appendLog(`Post-flash test: loading camera image ${cameraUrl}\n`);
+          if (await loadImage(cameraUrl, 4500)) {
+            cameraOk = true;
+            addQuickTestResult("Camera image", cameraUrl, true);
+            break;
+          }
+        }
+        if (!cameraOk) {
+          addQuickTestResult("Camera image", "not loaded", false);
+          els.quickTestPanel.dataset.state = "fail";
+        }
+      }
+
+      appUrls.forEach((url, index) => addQuickTestLink(index === 0 ? "Open Meerya app" : "Fallback app", url));
+      els.quickTestState.textContent = els.quickTestPanel.dataset.state === "pass" ? "Passed" : "Manual check";
+    }
+
     async function flash() {
       if (!state.connected || !state.loader) {
         throw new Error("Connect to the board before flashing.");
@@ -581,8 +792,11 @@
 
       appendLog("Flash complete. Resetting board...\n");
       await state.loader.after("hard_reset");
+      setStatus("Testing", "ready");
+      setProgress(100, "Firmware installed. Running post-flash test...");
+      await runPostFlashTest(state.target);
       setStatus("Complete", "done");
-      setProgress(100, "Firmware installed. The board will re-enumerate as Meerya USB audio.");
+      setProgress(100, "Firmware installed. Post-flash test finished.");
       els.disconnectBtn.disabled = false;
     }
 
