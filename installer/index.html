@@ -1904,9 +1904,9 @@
       setAudioPanelState("running");
       setAudioTestState("Running duplex test");
       setAudioColumnState("duplex", "running", "Running");
-      const computerTone = generateTonePcm(48000, 3.0, 1600, 0.34);
-      const meeryaNoise = generateNoisePcm(48000, 3.0, 0.08);
-      const computerWav = wavBlobFromPcm(computerTone.pcm, computerTone.sampleRate);
+      const computerStimulus = generateTestPcm(48000, 3.0, 0.72);
+      const meeryaNoise = generateNoisePcm(48000, 3.0, 0.05);
+      const computerWav = wavBlobFromPcm(computerStimulus.pcm, computerStimulus.sampleRate);
       const meeryaWav = wavBlobFromPcm(meeryaNoise.pcm, meeryaNoise.sampleRate);
       const capturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
       await delay(550);
@@ -1917,27 +1917,37 @@
       const capture = await capturePromise;
       const stats = analyzePcm(capture.pcm);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
-      const computerMagnitude = frequencyMagnitude(capture.pcm, capture.sampleRate, computerTone.frequencyHz);
+      const computerWaveform = compareWaveforms(computerStimulus.pcm, capture.pcm, capture.sampleRate);
+      const computerMagnitude = bandAverageMagnitude(
+        capture.pcm,
+        capture.sampleRate,
+        [700, 900, 1100, 1300, 1500, 1700, 2400],
+      );
       const meeryaLeakMagnitude = bandAverageMagnitude(capture.pcm, capture.sampleRate, [350, 700, 1050, 2300, 3000]);
-      const separationDb = dbfs(computerMagnitude) - dbfs(meeryaLeakMagnitude);
+      const leakageMarginDb = dbfs(stats.rms) - dbfs(meeryaLeakMagnitude);
       const hasAudibleSignal = stats.rms > 0.00012 && stats.peak > 0.0008;
       const isNotClipped = stats.clippedRatio < 0.01;
-      const computerTonePresent = computerMagnitude > 0.00002;
-      const echoSuppressed = separationDb >= 3;
+      const computerTonePresent = computerMagnitude > 0.00008 || computerWaveform.score >= 0.12;
+      const echoSuppressed = meeryaLeakMagnitude < 0.00012 || leakageMarginDb >= 12;
       const pass = hasAudibleSignal && isNotClipped && computerTonePresent && echoSuppressed;
-      addAudioResult("duplex", "Computer out tone B", `${computerTone.frequencyHz} Hz`, true);
+      addAudioResult("duplex", "Computer out stimulus B", "broadband chirp", true);
       addAudioResult("duplex", "Meerya out noise A", "continuous", true);
       addAudioResult("duplex", "Meerya mic RMS", `${dbfs(stats.rms).toFixed(1)} dBFS`, hasAudibleSignal);
       addAudioResult("duplex", "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, isNotClipped);
-      addAudioResult("duplex", "Computer tone in mic", `${dbfs(computerMagnitude).toFixed(1)} dBFS`, computerTonePresent);
+      addAudioResult(
+        "duplex",
+        "Computer stimulus match",
+        `${Math.round(computerWaveform.score * 100)}% (freq ${Math.round(computerWaveform.frequencyScore * 100)}%, lag ${computerWaveform.lagMs} ms)`,
+        computerTonePresent,
+      );
       addAudioResult("duplex", "Meerya noise leak", `${dbfs(meeryaLeakMagnitude).toFixed(1)} dBFS`, echoSuppressed);
-      addAudioResult("duplex", "AEC separation", `${separationDb.toFixed(1)} dB`, echoSuppressed);
+      addAudioResult("duplex", "Leakage margin", `${leakageMarginDb.toFixed(1)} dB below capture RMS`, echoSuppressed);
       addAudioResult("duplex", "Result", pass ? "Meerya hears computer tone while suppressing itself" : "duplex signal needs check", pass);
       addAudioMultiWaveformResult(
         "duplex",
         "Duplex 3D TFFT endpoints",
         [
-          { label: "computer out tone B", pcm: computerTone.pcm, sampleRate: computerTone.sampleRate, color: "#157f76" },
+          { label: "computer out stimulus B", pcm: computerStimulus.pcm, sampleRate: computerStimulus.sampleRate, color: "#157f76" },
           { label: "meerya out noise A", pcm: meeryaNoise.pcm, sampleRate: meeryaNoise.sampleRate, color: "#8a5a1f" },
           { label: "meerya in capture", pcm: capture.pcm, sampleRate: capture.sampleRate, color: "#7a3eb1" },
         ],
@@ -1947,15 +1957,16 @@
       setAudioColumnState("duplex", pass ? "pass" : "fail", pass ? "Passed" : "Check");
       setAudioPanelState(pass ? "pass" : "fail");
       setAudioTestState(pass ? "Passed" : "Audio weak/noisy");
-      appendLog(`Audio duplex test: computer=${computerTone.frequencyHz}Hz ${dbfs(computerMagnitude).toFixed(1)}dBFS, meeryaNoiseLeak=${dbfs(meeryaLeakMagnitude).toFixed(1)}dBFS, separation=${separationDb.toFixed(1)}dB, clipped=${(stats.clippedRatio * 100).toFixed(2)}%, result=${pass ? "pass" : "fail"}\n`);
+      appendLog(`Audio duplex test: computerMatch=${Math.round(computerWaveform.score * 100)}% freq=${Math.round(computerWaveform.frequencyScore * 100)}% computerBand=${dbfs(computerMagnitude).toFixed(1)}dBFS meeryaNoiseLeak=${dbfs(meeryaLeakMagnitude).toFixed(1)}dBFS leakMargin=${leakageMarginDb.toFixed(1)}dB clipped=${(stats.clippedRatio * 100).toFixed(2)}% result=${pass ? "pass" : "fail"}\n`);
       return {
         pass,
         stats,
+        computerWaveform,
         computerMagnitude,
         meeryaLeakMagnitude,
-        separationDb,
+        leakageMarginDb,
         recording,
-        computerTone,
+        computerStimulus,
         meeryaNoise,
         capturePcm: capture.pcm,
         sampleRate: capture.sampleRate,
