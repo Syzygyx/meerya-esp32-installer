@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meerya Windows Audio Validation</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #17191f;
+      --muted: #657083;
+      --line: #d9dee8;
+      --ok: #16703c;
+      --warn: #99610a;
+      --bad: #b42318;
+      --accent: #0f766e;
+      --code: #111827;
+      --code-ink: #e5e7eb;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111318;
+        --panel: #1a1d24;
+        --ink: #f2f4f8;
+        --muted: #aab2c2;
+        --line: #303746;
+        --ok: #4ade80;
+        --warn: #fbbf24;
+        --bad: #f87171;
+        --accent: #2dd4bf;
+        --code: #090b10;
+        --code-ink: #d8dee9;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 44px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.15rem;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    a { color: var(--accent); }
+
+    .status {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 99px;
+      background: var(--ok);
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    section, .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    section { margin-top: 14px; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 12px 0 0;
+    }
+
+    .kpi {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      min-height: 92px;
+    }
+
+    .kpi strong {
+      display: block;
+      font-size: 1.55rem;
+      line-height: 1.05;
+      margin-bottom: 6px;
+    }
+
+    .kpi span {
+      color: var(--muted);
+      line-height: 1.35;
+      font-size: .92rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .94rem;
+      margin-top: 10px;
+    }
+
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      line-height: 1.35;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      background: color-mix(in srgb, var(--line) 45%, transparent);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-weight: 700;
+      font-size: .82rem;
+    }
+
+    .pass { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .fail { color: var(--bad); }
+
+    audio {
+      width: 100%;
+      margin: 8px 0 4px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: .86rem;
+      line-height: 1.45;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      text-decoration: none;
+      background: color-mix(in srgb, var(--panel) 84%, var(--bg));
+    }
+
+    pre {
+      margin: 10px 0 0;
+      padding: 12px;
+      border-radius: 6px;
+      overflow: auto;
+      background: var(--code);
+      color: var(--code-ink);
+      font-size: .86rem;
+      line-height: 1.45;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    @media (max-width: 820px) {
+      header, .grid.two, .grid.three, .kpis {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Meerya Windows Audio Validation</h1>
+        <p>Public methodology and results for Windows microphone, speaker, duplex, and Google Meet compatibility testing.</p>
+      </div>
+      <div class="status"><span class="dot"></span> Published test packet</div>
+    </header>
+
+    <section>
+      <h2>Current Assessment</h2>
+      <p>
+        The current public installer build enumerates on Windows as <code>Meerya UAC1 48k Mono</code>. Windows native
+        microphone capture, Chrome/WebRTC capture, and the WebRTC path from the <code>meet.google.com</code> origin all
+        captured 48 kHz mono audio with no clipping. Browser duplex tests showed Meerya receiving the computer-side
+        stimulus while suppressing its own speaker stimulus.
+      </p>
+      <p>
+        The actual Google Meet meeting-room UI was not fully automated because the fresh Chrome profile reached Google
+        sign-in. The relevant customer risk path was still exercised directly from the Google Meet origin with Google
+        Meet-style <code>getUserMedia</code> constraints.
+      </p>
+      <div class="kpis">
+        <div class="kpi"><strong class="pass">Pass</strong><span>Chrome WebRTC explicit Meerya microphone capture</span></div>
+        <div class="kpi"><strong class="pass">Pass</strong><span><code>meet.google.com</code> origin WebRTC capture</span></div>
+        <div class="kpi"><strong class="pass">0.00%</strong><span>Clipping in Windows native mic capture and web duplex runs</span></div>
+        <div class="kpi"><strong>48 kHz</strong><span>Single-channel UAC1 microphone and speaker operating mode</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Build And Environment</h2>
+      <table>
+        <tbody>
+          <tr><th>Firmware source</th><td><code>41c64ab0a590</code></td></tr>
+          <tr><th>Installer source</th><td><code>1f22ce5</code> plus this report page</td></tr>
+          <tr><th>Public installer</th><td><a href="../installer/">Meerya firmware installer</a></td></tr>
+          <tr><th>Windows host</th><td>WinBook-Air, Windows 10/11 test path via Chrome and Windows WASAPI tooling</td></tr>
+          <tr><th>USB device</th><td><code>Microphone (7- Meerya UAC1 48k Mono) (303a:8022)</code> and <code>Speakers (7- Meerya UAC1 48k Mono)</code></td></tr>
+          <tr><th>Descriptor mode</th><td>UAC1, 48 kHz, mono microphone, mono speaker, camera disabled for Windows audio build</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Google Meet Methodology And Results</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Method</h3>
+          <p>
+            Chrome was launched on WinBook and granted microphone permission. The probe selected the explicit Meerya
+            audio input device, then called <code>navigator.mediaDevices.getUserMedia</code> with constraints matching
+            the Google Meet capture path.
+          </p>
+          <pre>{
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  sampleRate: { ideal: 48000 },
+  sampleSize: { ideal: 16 },
+  channelCount: { ideal: 1 }
+}</pre>
+        </div>
+        <div class="card">
+          <h3>Meet-Origin Result</h3>
+          <table>
+            <tbody>
+              <tr><th>URL</th><td><code>https://meet.google.com/?meerya_probe=1</code></td></tr>
+              <tr><th>Selected input</th><td><code>Microphone (7- Meerya UAC1 48k Mono) (303a:8022)</code></td></tr>
+              <tr><th>Track settings</th><td>48 kHz, 16-bit, mono, EC on, NS on, AGC on, 10 ms latency</td></tr>
+              <tr><th>Captured duration</th><td>7.851 s, 376,832 samples</td></tr>
+              <tr><th>RMS / peak</th><td>-65.32 dBFS RMS, -48.03 dBFS peak</td></tr>
+              <tr><th>Clipping</th><td>0.00%</td></tr>
+              <tr><th>Result</th><td><span class="pill pass">pass</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="small">
+        Actual Meet room automation stopped at Google sign-in when using a clean Playwright Chrome profile. A signed-in
+        manual browser session should be used for the final customer-facing Meet-room confirmation.
+      </p>
+    </section>
+
+    <section>
+      <h2>Detailed Audio Statistics</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Windows Native Microphone Capture</h3>
+          <table>
+            <tbody>
+              <tr><th>API/backend</th><td>Windows WASAPI through <code>sounddevice</code></td></tr>
+              <tr><th>Duration</th><td>10.000 s, 480,000 samples</td></tr>
+              <tr><th>Sample format</th><td>48 kHz, mono, 16-bit WAV artifact</td></tr>
+              <tr><th>RMS / peak</th><td>-62.33 dBFS RMS, -44.07 dBFS peak</td></tr>
+              <tr><th>Clipped samples</th><td>0 / 480,000, 0.00%</td></tr>
+              <tr><th>Zero sample ratio</th><td>18.29%</td></tr>
+              <tr><th>Voice-band energy</th><td>95.37% in 120 Hz to 6 kHz</td></tr>
+              <tr><th>High-band energy</th><td>0.00% in 8 kHz to 20 kHz</td></tr>
+              <tr><th>Mean abs delta / RMS</th><td>0.178</td></tr>
+              <tr><th>DC / RMS</th><td>0.000253</td></tr>
+            </tbody>
+          </table>
+          <p class="small">
+            The script marked this run as failed only because <code>microphone_usb_zero_loads</code> advanced after the
+            stream. The captured PCM metrics are otherwise clean: no clipping, no USB short writes, and no microphone
+            errors.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Chrome WebRTC Explicit Meerya Capture</h3>
+          <table>
+            <tbody>
+              <tr><th>Origin</th><td><code>syzygyx.github.io/meerya-esp32-installer</code></td></tr>
+              <tr><th>Selected input</th><td><code>Microphone (7- Meerya UAC1 48k Mono) (303a:8022)</code></td></tr>
+              <tr><th>Duration</th><td>7.936 s, 380,928 samples</td></tr>
+              <tr><th>Track settings</th><td>48 kHz, 16-bit, mono, EC on, NS on, AGC on</td></tr>
+              <tr><th>RMS / peak</th><td>-75.35 dBFS RMS, -49.95 dBFS peak</td></tr>
+              <tr><th>Clipping</th><td>0.00%</td></tr>
+              <tr><th>Mean abs delta / RMS</th><td>0.038</td></tr>
+              <tr><th>Result</th><td><span class="pill pass">pass</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Firmware Counters During Native Mic Capture</h2>
+      <table>
+        <thead>
+          <tr><th>Counter</th><th>Delta</th><th>Interpretation</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>microphone_packets</code></td><td>901</td><td>Device microphone producer advanced during capture.</td></tr>
+          <tr><td><code>microphone_bytes</code></td><td>864,960</td><td>Producer byte count advanced at the expected packet scale.</td></tr>
+          <tr><td><code>microphone_usb_packets</code></td><td>901</td><td>USB IN packet count matched produced microphone packets.</td></tr>
+          <tr><td><code>microphone_usb_bytes</code></td><td>864,960</td><td>USB payload bytes matched produced bytes.</td></tr>
+          <tr><td><code>microphone_usb_write_bytes</code></td><td>864,960</td><td>USB write bytes matched produced bytes.</td></tr>
+          <tr><td><code>microphone_errors</code></td><td>0</td><td>No firmware-side microphone errors reported.</td></tr>
+          <tr><td><code>microphone_zero_reads</code></td><td>0</td><td>No zero microphone reads reported.</td></tr>
+          <tr><td><code>microphone_usb_short_writes</code></td><td>0</td><td>No USB short writes reported.</td></tr>
+          <tr><td><code>microphone_usb_partial_packets</code></td><td>0</td><td>No partial USB packets reported.</td></tr>
+          <tr><td><code>microphone_usb_zero_loads</code></td><td>168</td><td>Diagnostic callback zero-loads advanced; this is the only native mic test warning.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Duplex And Speaker Methodology</h2>
+      <p>
+        The public installer web test selects the computer speaker as computer output, Meerya as USB input/output, emits
+        a broadband chirp from the computer, emits a different continuous noise stimulus from Meerya, records Meerya, and
+        checks that the Meerya microphone matches the computer stimulus while suppressing the Meerya speaker stimulus.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Run</th><th>Meerya mic RMS</th><th>Clipping</th><th>Computer stimulus match</th><th>Meerya self-leak</th><th>Leakage margin</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Public speech build, run 1</td><td>-71.7 dBFS</td><td>0.00%</td><td>45%, freq 49%, lag 231 ms</td><td>-95.9 dBFS</td><td>24.2 dB below capture RMS</td><td><span class="pill pass">pass</span></td></tr>
+          <tr><td>Public speech build, run 2</td><td>-71.8 dBFS</td><td>0.00%</td><td>48%, freq 52%, lag 157 ms</td><td>-97.6 dBFS</td><td>25.8 dB below capture RMS</td><td><span class="pill pass">pass</span></td></tr>
+          <tr><td>De-pop OTA, run 1</td><td>-72.2 dBFS</td><td>0.00%</td><td>60%, freq 65%, lag 181 ms</td><td>-94.2 dBFS</td><td>22.0 dB below capture RMS</td><td><span class="pill pass">pass</span></td></tr>
+          <tr><td>De-pop OTA, run 2</td><td>-72.2 dBFS</td><td>0.00%</td><td>56%, freq 61%, lag -31 ms</td><td>-93.5 dBFS</td><td>21.4 dB below capture RMS</td><td><span class="pill pass">pass</span></td></tr>
+        </tbody>
+      </table>
+      <p class="small">
+        One native Windows full-duplex script run was intentionally not treated as an acceptance result because it captured
+        only 0.05 s and reported speaker queue drops. Browser-level duplex is the stronger current evidence.
+      </p>
+    </section>
+
+    <section>
+      <h2>Speech Capture Checks</h2>
+      <table>
+        <thead>
+          <tr><th>Run</th><th>Speech mic RMS</th><th>Clipping</th><th>Waveform match</th><th>Speech dominance</th><th>Self-leak</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Public speech build, run 1</td><td>-76.8 dBFS</td><td>0.00%</td><td>66%, freq 72%, lag 55 ms</td><td>-9.7 dB</td><td>-96.8 dBFS</td><td><span class="pill pass">pass</span></td></tr>
+          <tr><td>Public speech build, run 2</td><td>-77.6 dBFS</td><td>0.00%</td><td>65%, freq 70%, lag 48 ms</td><td>-4.2 dB</td><td>-91.8 dBFS</td><td><span class="pill pass">pass</span></td></tr>
+          <tr><td>De-pop OTA speech subtest</td><td>-160.0 dBFS</td><td>0.00%</td><td>0%</td><td>0.0 dB</td><td>-160.0 dBFS</td><td><span class="pill warn">test sequencing/routing issue</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Audio Samples</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Windows Native Meerya Mic</h3>
+          <audio controls src="assets/windows-mic-only-sounddevice-20260702-175259.wav"></audio>
+          <p class="small">10.000 s, 48 kHz mono PCM WAV, SHA-256 <code>c340b191df8f378573062217744f9bae474e0422cfc7d5d3555e60505b6d6414</code>.</p>
+        </div>
+        <div class="card">
+          <h3>Browser MediaCapture</h3>
+          <audio controls src="assets/meerya-mediacapture-latest.wav"></audio>
+          <p class="small">7.168 s, 48 kHz mono WAV, SHA-256 <code>6b869bc61768f58b14c3781ecdf1c2c05aaf60200e1df07658c912d994317db7</code>.</p>
+        </div>
+        <div class="card">
+          <h3>Browser Stimulus Reference</h3>
+          <audio controls src="assets/meerya-mediacapture-stimulus-latest.wav"></audio>
+          <p class="small">6.251 s, 48 kHz mono WAV, SHA-256 <code>d32db7476c3e7946ae2b936978554277e1138dbe244bca0728ac9b058bc8ec37</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Reproducible Artifacts</h2>
+      <div class="links">
+        <a href="assets/windows-meet-origin-webrtc-probe.json">Meet-origin WebRTC JSON</a>
+        <a href="assets/windows-webrtc-meet-explicit-probe.json">Installer-origin WebRTC JSON</a>
+        <a href="assets/windows-mic-only-depop-ota.json">Windows native mic JSON</a>
+        <a href="assets/windows-web-audio-speech-public-334b0b8.json">Public web audio JSON</a>
+        <a href="assets/windows-web-audio-depop-ota.json">De-pop web audio JSON</a>
+        <a href="assets/windows-native-audio-depop-ota.json">Native duplex diagnostic JSON</a>
+        <a href="https://github.com/Syzygyx/meerya-esp32/blob/main/scripts/windows_meerya_webrtc_probe.py">WebRTC probe source</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Open Items</h2>
+      <ul>
+        <li>Run a signed-in, real Google Meet room test using the customer-equivalent Chrome profile.</li>
+        <li>Keep browser-level duplex as the acceptance path until native full-duplex duration and speaker queue-drop diagnostics are resolved.</li>
+        <li>Repeat the public installer speech subtest on the current <code>41c64ab0a590</code> firmware so the speech pass data is from the exact deployed build, not the earlier <code>334b0b854ab1</code> public speech build.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

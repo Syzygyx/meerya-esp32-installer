@@ -1,0 +1,346 @@
+{
+  "channel": "chrome",
+  "columns": {
+    "duplex": {
+      "rows": [
+        {
+          "result": "pass",
+          "text": "Computer out stimulus Bbroadband chirp"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya out noise Acontinuous"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya mic RMS-72.2 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Clipping0.00%"
+        },
+        {
+          "result": "pass",
+          "text": "Computer stimulus match60% (freq 65%, lag 181 ms)"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya noise leak-94.2 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Leakage margin22.0 dB below capture RMS"
+        },
+        {
+          "result": "pass",
+          "text": "ResultMeerya hears computer tone while suppressing itself"
+        },
+        {
+          "result": "pass",
+          "text": "Duplex 3D TFFT endpoints"
+        },
+        {
+          "result": "info",
+          "text": "Play Meerya capturePlay recording"
+        },
+        {
+          "result": "pass",
+          "text": "Computer out stimulus Bbroadband chirp"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya out noise Acontinuous"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya mic RMS-72.2 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Clipping0.00%"
+        },
+        {
+          "result": "pass",
+          "text": "Computer stimulus match56% (freq 61%, lag -31 ms)"
+        },
+        {
+          "result": "pass",
+          "text": "Meerya noise leak-93.5 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Leakage margin21.4 dB below capture RMS"
+        },
+        {
+          "result": "pass",
+          "text": "ResultMeerya hears computer tone while suppressing itself"
+        },
+        {
+          "result": "pass",
+          "text": "Duplex 3D TFFT endpoints"
+        },
+        {
+          "result": "info",
+          "text": "Play Meerya capturePlay recording"
+        },
+        {
+          "result": "pass",
+          "text": "Computer speech Bhigh-fidelity WAV phrase"
+        },
+        {
+          "result": "fail",
+          "text": "Speech mic RMS-160.0 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Speech clipping0.00%"
+        },
+        {
+          "result": "fail",
+          "text": "Speech waveform0% (freq 0%, lag 0 ms)"
+        },
+        {
+          "result": "fail",
+          "text": "Speech dominance0.0 dB over rumble/hiss"
+        },
+        {
+          "result": "fail",
+          "text": "Speech self-leak-160.0 dBFS"
+        },
+        {
+          "result": "fail",
+          "text": "Speech resultspeech capture needs review"
+        },
+        {
+          "result": "fail",
+          "text": "Speech capture 3D TFFT endpoints"
+        },
+        {
+          "result": "info",
+          "text": "Play speech capturePlay recording"
+        },
+        {
+          "result": "pass",
+          "text": "Computer speech Bhigh-fidelity WAV phrase"
+        },
+        {
+          "result": "fail",
+          "text": "Speech mic RMS-160.0 dBFS"
+        },
+        {
+          "result": "pass",
+          "text": "Speech clipping0.00%"
+        },
+        {
+          "result": "fail",
+          "text": "Speech waveform0% (freq 0%, lag 0 ms)"
+        },
+        {
+          "result": "fail",
+          "text": "Speech dominance0.0 dB over rumble/hiss"
+        },
+        {
+          "result": "fail",
+          "text": "Speech self-leak-160.0 dBFS"
+        },
+        {
+          "result": "fail",
+          "text": "Speech resultspeech capture needs review"
+        },
+        {
+          "result": "fail",
+          "text": "Speech capture 3D TFFT endpoints"
+        },
+        {
+          "result": "info",
+          "text": "Play speech capturePlay recording"
+        }
+      ],
+      "state": "fail"
+    },
+    "in": {
+      "rows": [],
+      "state": "idle"
+    },
+    "out": {
+      "rows": [],
+      "state": "idle"
+    }
+  },
+  "console_errors": [],
+  "controls": {
+    "duplexDisabled": false,
+    "hostToMeeryaDisabled": false,
+    "meeryaToHostDisabled": false,
+    "refreshDisabled": false
+  },
+  "elapsed_s": 30.156,
+  "headless": false,
+  "log": "Selected Waveshare ESP32-S3 Audio Board - Windows UAC1 Duplex Audio\nFirmware commit: 334b0b854ab1 generated 2026-07-02T22:05:43Z\nAudio smoke test: found 9 media devices, Meerya input=yes, output=yes\nAudio smoke test: found 9 media devices, Meerya input=yes, output=yes\nAudio smoke test: found 9 media devices, Meerya input=yes, output=yes\nAudio speech test: match=0% speechBand=-160.0dBFS rumble=-160.0dBFS hiss=-160.0dBFS dominance=0.0dB leak=-160.0dBFS result=check\nAudio duplex test: computerMatch=60% freq=65% computerBand=-93.1dBFS meeryaNoiseLeak=-94.2dBFS leakMargin=22.0dB clipped=0.00% result=pass\nAudio speech test: match=0% speechBand=-160.0dBFS rumble=-160.0dBFS hiss=-160.0dBFS dominance=0.0dB leak=-160.0dBFS result=check\nAudio duplex test: computerMatch=56% freq=61% computerBand=-92.2dBFS meeryaNoiseLeak=-93.5dBFS leakMargin=21.4dB clipped=0.00% result=pass\n",
+  "panelState": "fail",
+  "pass": false,
+  "result": "fail",
+  "rows": [
+    {
+      "result": "pass",
+      "text": "Computer out stimulus Bbroadband chirp"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya out noise Acontinuous"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya mic RMS-72.2 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Clipping0.00%"
+    },
+    {
+      "result": "pass",
+      "text": "Computer stimulus match60% (freq 65%, lag 181 ms)"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya noise leak-94.2 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Leakage margin22.0 dB below capture RMS"
+    },
+    {
+      "result": "pass",
+      "text": "ResultMeerya hears computer tone while suppressing itself"
+    },
+    {
+      "result": "pass",
+      "text": "Duplex 3D TFFT endpoints"
+    },
+    {
+      "result": "info",
+      "text": "Play Meerya capturePlay recording"
+    },
+    {
+      "result": "pass",
+      "text": "Computer out stimulus Bbroadband chirp"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya out noise Acontinuous"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya mic RMS-72.2 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Clipping0.00%"
+    },
+    {
+      "result": "pass",
+      "text": "Computer stimulus match56% (freq 61%, lag -31 ms)"
+    },
+    {
+      "result": "pass",
+      "text": "Meerya noise leak-93.5 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Leakage margin21.4 dB below capture RMS"
+    },
+    {
+      "result": "pass",
+      "text": "ResultMeerya hears computer tone while suppressing itself"
+    },
+    {
+      "result": "pass",
+      "text": "Duplex 3D TFFT endpoints"
+    },
+    {
+      "result": "info",
+      "text": "Play Meerya capturePlay recording"
+    },
+    {
+      "result": "pass",
+      "text": "Computer speech Bhigh-fidelity WAV phrase"
+    },
+    {
+      "result": "fail",
+      "text": "Speech mic RMS-160.0 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Speech clipping0.00%"
+    },
+    {
+      "result": "fail",
+      "text": "Speech waveform0% (freq 0%, lag 0 ms)"
+    },
+    {
+      "result": "fail",
+      "text": "Speech dominance0.0 dB over rumble/hiss"
+    },
+    {
+      "result": "fail",
+      "text": "Speech self-leak-160.0 dBFS"
+    },
+    {
+      "result": "fail",
+      "text": "Speech resultspeech capture needs review"
+    },
+    {
+      "result": "fail",
+      "text": "Speech capture 3D TFFT endpoints"
+    },
+    {
+      "result": "info",
+      "text": "Play speech capturePlay recording"
+    },
+    {
+      "result": "pass",
+      "text": "Computer speech Bhigh-fidelity WAV phrase"
+    },
+    {
+      "result": "fail",
+      "text": "Speech mic RMS-160.0 dBFS"
+    },
+    {
+      "result": "pass",
+      "text": "Speech clipping0.00%"
+    },
+    {
+      "result": "fail",
+      "text": "Speech waveform0% (freq 0%, lag 0 ms)"
+    },
+    {
+      "result": "fail",
+      "text": "Speech dominance0.0 dB over rumble/hiss"
+    },
+    {
+      "result": "fail",
+      "text": "Speech self-leak-160.0 dBFS"
+    },
+    {
+      "result": "fail",
+      "text": "Speech resultspeech capture needs review"
+    },
+    {
+      "result": "fail",
+      "text": "Speech capture 3D TFFT endpoints"
+    },
+    {
+      "result": "info",
+      "text": "Play speech capturePlay recording"
+    }
+  ],
+  "selectedDevices": {
+    "hostInput": "Internal Microphone (Cirrus Logic CS4208 (AB 125))",
+    "hostOutput": "Default - Speakers (Cirrus Logic CS4208 (AB 125))",
+    "meeryaInput": "Default - Microphone (7- Meerya UAC1 48k Mono) (303a:8022)",
+    "meeryaOutput": "Speakers (7- Meerya UAC1 48k Mono) (303a:8022)"
+  },
+  "started_at": "2026-07-03T00:50:39Z",
+  "stateText": "Speech needs review",
+  "url": "https://syzygyx.github.io/meerya-esp32-installer/installer/?cb=334b0b8-depop-ota"
+}

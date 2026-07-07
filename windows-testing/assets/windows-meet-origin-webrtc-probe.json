@@ -1,0 +1,125 @@
+{
+  "channel": "chrome",
+  "chunkCount": 184,
+  "clippedRatio": 0,
+  "constraints": {
+    "autoGainControl": true,
+    "channelCount": {
+      "ideal": 1
+    },
+    "deviceId": {
+      "exact": "d4ba5c79600ac9cec97504d48021ec547cfd8049fce3e89f4083eff823923312"
+    },
+    "echoCancellation": true,
+    "noiseSuppression": true,
+    "sampleRate": {
+      "ideal": 48000
+    },
+    "sampleSize": {
+      "ideal": 16
+    }
+  },
+  "device_token": "Meerya",
+  "durationSeconds": 7.850666666666666,
+  "elapsed_s": 14.765,
+  "headless": false,
+  "inputs": [
+    {
+      "deviceId": "default",
+      "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+      "kind": "audioinput",
+      "label": "Default - Microphone (7- Meerya UAC1 48k Mono) (303a:8022)",
+      "match": true
+    },
+    {
+      "deviceId": "communications",
+      "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+      "kind": "audioinput",
+      "label": "Communications - Microphone (7- Meerya UAC1 48k Mono) (303a:8022)",
+      "match": true
+    },
+    {
+      "deviceId": "b05ad5649bcf6390359174879bea01ad8350365234552d74c2217817b7fba5f7",
+      "groupId": "db7442ec1bb33cb6e19122b8a61b5bbce63c1c77e2ca9e485cd4b6ac9e979136",
+      "kind": "audioinput",
+      "label": "Internal Microphone (Cirrus Logic CS4208 (AB 125))",
+      "match": false
+    },
+    {
+      "deviceId": "d4ba5c79600ac9cec97504d48021ec547cfd8049fce3e89f4083eff823923312",
+      "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+      "kind": "audioinput",
+      "label": "Microphone (7- Meerya UAC1 48k Mono) (303a:8022)",
+      "match": true
+    }
+  ],
+  "meanAbsDeltaToRms": 0.1483618071142014,
+  "pass": true,
+  "peak": 0.003969115205109119,
+  "peakDbfs": -48.02612590688038,
+  "result": "pass",
+  "rms": 0.0005421081530692577,
+  "rmsDbfs": -65.31828122142878,
+  "sampleCount": 376832,
+  "sampleRate": 48000,
+  "seconds": 8.0,
+  "selected": {
+    "deviceId": "d4ba5c79600ac9cec97504d48021ec547cfd8049fce3e89f4083eff823923312",
+    "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+    "kind": "audioinput",
+    "label": "Microphone (7- Meerya UAC1 48k Mono) (303a:8022)",
+    "match": true
+  },
+  "started_at": "2026-07-07T19:09:39Z",
+  "trackCapabilities": {
+    "autoGainControl": [
+      true,
+      false
+    ],
+    "channelCount": {
+      "max": 1,
+      "min": 1
+    },
+    "deviceId": "d4ba5c79600ac9cec97504d48021ec547cfd8049fce3e89f4083eff823923312",
+    "echoCancellation": [
+      true,
+      false,
+      "remote-only"
+    ],
+    "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+    "latency": {
+      "max": 0.01,
+      "min": 0.01
+    },
+    "noiseSuppression": [
+      true,
+      false
+    ],
+    "sampleRate": {
+      "max": 48000,
+      "min": 48000
+    },
+    "sampleSize": {
+      "max": 16,
+      "min": 16
+    },
+    "voiceIsolation": [
+      true,
+      false
+    ]
+  },
+  "trackSettings": {
+    "autoGainControl": true,
+    "channelCount": 1,
+    "deviceId": "d4ba5c79600ac9cec97504d48021ec547cfd8049fce3e89f4083eff823923312",
+    "echoCancellation": true,
+    "groupId": "07851c708a12723a770be2149a1dd6c2de5ce4143ac1bd3ed740e4f39a84b132",
+    "latency": 0.01,
+    "noiseSuppression": true,
+    "sampleRate": 48000,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "url": "https://meet.google.com/?meerya_probe=1",
+  "zeroSampleRatio": 0.12365457286005435
+}
