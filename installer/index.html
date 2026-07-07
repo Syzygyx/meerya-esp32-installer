@@ -698,10 +698,6 @@
               <label for="hostInputSelect">Computer microphone</label>
               <select id="hostInputSelect"></select>
             </div>
-            <div>
-              <label for="audioDuplexSeconds">Duplex duration, seconds</label>
-              <input id="audioDuplexSeconds" type="number" min="5" max="300" step="5" value="60">
-            </div>
           </div>
           <div class="audio-test-actions">
             <button id="audioRefreshBtn">Refresh Devices</button>
@@ -846,7 +842,6 @@
       meeryaInputSelect: document.getElementById("meeryaInputSelect"),
       meeryaOutputSelect: document.getElementById("meeryaOutputSelect"),
       hostInputSelect: document.getElementById("hostInputSelect"),
-      audioDuplexSeconds: document.getElementById("audioDuplexSeconds"),
       audioRefreshBtn: document.getElementById("audioRefreshBtn"),
       audioHostToMeeryaBtn: document.getElementById("audioHostToMeeryaBtn"),
       audioMeeryaToHostBtn: document.getElementById("audioMeeryaToHostBtn"),
@@ -1309,12 +1304,6 @@
       return select.selectedOptions?.[0]?.textContent?.trim() || "";
     }
 
-    function selectedDuplexDurationSeconds() {
-      const parsed = Number(els.audioDuplexSeconds.value);
-      if (!Number.isFinite(parsed)) return 60;
-      return Math.max(5, Math.min(300, Math.round(parsed)));
-    }
-
     function collectAudioTestReport() {
       const readRows = (root) => [...root.querySelectorAll("li")].map((item) => ({
           result: item.dataset.result || "info",
@@ -1342,7 +1331,6 @@
           hostToMeeryaDisabled: els.audioHostToMeeryaBtn.disabled,
           meeryaToHostDisabled: els.audioMeeryaToHostBtn.disabled,
           duplexDisabled: els.audioDuplexBtn.disabled,
-          duplexDurationSeconds: selectedDuplexDurationSeconds(),
         },
         selectedDevices: {
           hostOutput: selectedOptionLabel(els.hostOutputSelect),
@@ -1594,7 +1582,7 @@
       }
     }
 
-    async function capturePcmFromDevice(inputDeviceId, durationMs, progressLabel = "") {
+    async function capturePcmFromDevice(inputDeviceId, durationMs) {
       const constraints = {
         audio: {
           deviceId: inputDeviceId ? { exact: inputDeviceId } : undefined,
@@ -1610,28 +1598,16 @@
       const source = context.createMediaStreamSource(stream);
       const processor = context.createScriptProcessor(4096, 1, 1);
       const chunks = [];
-      let progressTimer = null;
       processor.onaudioprocess = (event) => {
         chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
       };
       source.connect(processor);
       processor.connect(context.destination);
-      if (progressLabel) {
-        const startedAt = performance.now();
-        progressTimer = setInterval(() => {
-          const elapsedSeconds = Math.min(durationMs, performance.now() - startedAt) / 1000;
-          setAudioTestState(`${progressLabel} ${elapsedSeconds.toFixed(1)} / ${(durationMs / 1000).toFixed(1)}s`);
-        }, 1000);
-      }
-      try {
-        await delay(durationMs);
-      } finally {
-        if (progressTimer) clearInterval(progressTimer);
-        processor.disconnect();
-        source.disconnect();
-        stream.getTracks().forEach((track) => track.stop());
-        await context.close();
-      }
+      await delay(durationMs);
+      processor.disconnect();
+      source.disconnect();
+      stream.getTracks().forEach((track) => track.stop());
+      await context.close();
       const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
       const pcm = new Float32Array(total);
       let offset = 0;
@@ -1722,7 +1698,7 @@
     }
 
     function correlationMatch(referencePcm, capturePcm, sampleRate) {
-      const stride = Math.max(8, Math.ceil(Math.max(referencePcm.length, capturePcm.length) / 48000));
+      const stride = 8;
       const reference = normalizeForMatch(resampleForMatch(activeSliceForMatch(referencePcm), stride));
       const capture = normalizeForMatch(resampleForMatch(activeSliceForMatch(capturePcm), stride));
       const maxLag = Math.min(Math.floor(Math.min(reference.length, capture.length) * 0.45), Math.round(sampleRate / stride));
@@ -1949,17 +1925,14 @@
       if (clear) {
         clearAudioResults();
       }
-      const durationSeconds = selectedDuplexDurationSeconds();
-      els.audioDuplexSeconds.value = String(durationSeconds);
-      const captureDurationMs = Math.round((durationSeconds + 1.3) * 1000);
       setAudioPanelState("running");
-      setAudioTestState(`Running duplex test (${durationSeconds}s)`);
+      setAudioTestState("Running duplex test");
       setAudioColumnState("duplex", "running", "Running");
-      const computerStimulus = generateTestPcm(48000, durationSeconds, 0.72);
-      const meeryaNoise = generateNoisePcm(48000, durationSeconds, 0.05);
+      const computerStimulus = generateTestPcm(48000, 3.0, 0.72);
+      const meeryaNoise = generateNoisePcm(48000, 3.0, 0.05);
       const computerWav = wavBlobFromPcm(computerStimulus.pcm, computerStimulus.sampleRate);
       const meeryaWav = wavBlobFromPcm(meeryaNoise.pcm, meeryaNoise.sampleRate);
-      const capturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, captureDurationMs, "Recording duplex");
+      const capturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
       await delay(550);
       await Promise.all([
         playWavToDevice(computerWav, els.hostOutputSelect.value),
@@ -1981,7 +1954,6 @@
       const computerTonePresent = computerMagnitude > 0.00008 || computerWaveform.score >= 0.12;
       const echoSuppressed = meeryaLeakMagnitude < 0.00012 || leakageMarginDb >= 12;
       const pass = hasAudibleSignal && isNotClipped && computerTonePresent && echoSuppressed;
-      addAudioResult("duplex", "Duration", `${durationSeconds}s stimulus, ${(capture.pcm.length / capture.sampleRate).toFixed(1)}s capture`, true);
       addAudioResult("duplex", "Computer out stimulus B", "broadband chirp", true);
       addAudioResult("duplex", "Meerya out noise A", "continuous", true);
       addAudioResult("duplex", "Meerya mic RMS", `${dbfs(stats.rms).toFixed(1)} dBFS`, hasAudibleSignal);
@@ -2074,8 +2046,6 @@
       return {
         pass: overallPass,
         corePass: pass,
-        durationSeconds,
-        captureDurationSeconds: capture.pcm.length / capture.sampleRate,
         stats,
         computerWaveform,
         computerMagnitude,
