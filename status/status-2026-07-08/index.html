@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly Status: Windows Duplex Audio</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f8fa;
+      --text: #17202a;
+      --muted: #5f6c7b;
+      --panel: #ffffff;
+      --border: #d7dde5;
+      --accent: #0f766e;
+      --code-bg: #eef2f6;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111418;
+        --text: #e8edf2;
+        --muted: #a7b2be;
+        --panel: #181d23;
+        --border: #303946;
+        --accent: #5eead4;
+        --code-bg: #222a33;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .header-inner, main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 1.1;
+    }
+    nav {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    a { color: var(--accent); }
+    nav a {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      background: var(--bg);
+      text-decoration: none;
+      font-size: 0.92rem;
+    }
+    main { padding-top: 32px; }
+    h2 {
+      margin-top: 42px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 1.65rem;
+    }
+    h3 {
+      margin-top: 30px;
+      font-size: 1.25rem;
+    }
+    p, li { max-width: 82ch; }
+    code {
+      border-radius: 4px;
+      padding: 0.1em 0.28em;
+      background: var(--code-bg);
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--code-bg);
+    }
+    pre code { padding: 0; background: transparent; }
+    .table-wrap {
+      overflow-x: auto;
+      margin: 18px 0 26px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: color-mix(in srgb, var(--panel) 84%, var(--bg));
+    }
+    tr:last-child td { border-bottom: 0; }
+    @media (max-width: 700px) {
+      .header-inner, main { padding: 18px; }
+      table { min-width: 640px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <p class="eyebrow">Meerya ESP32 weekly status</p>
+      <h1>Windows Duplex Audio</h1>
+      <nav>
+        <a href="../../">Home</a>
+        <a href="../">Weekly status index</a>
+        <a href="../../installer/">Firmware installer</a>
+        <a href="../../windows-testing/">Windows testing evidence</a>
+        <a href="../status-2026-07-08.md">Raw Markdown</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+<h1 id="meerya-windows-duplex-audio-thread-summary">Meerya Windows Duplex Audio Thread Summary</h1>
+<p>Date range: 2026-07-01 through 2026-07-08 Repo: <code>Syzygyx/meerya-esp32</code> Primary objective: make Meerya work as a reliable full-duplex USB speakerphone on Windows, especially Windows 10/11 browser and native audio paths.</p>
+<h2 id="executive-summary">Executive Summary</h2>
+<p>This week was a concentrated push on Meerya&#x27;s ESP32-S3 USB audio firmware, web installer, and Windows validation loop. The work moved from basic USB enumeration and static/garbled audio debugging into a UAC1 Windows profile, web-flasher deployment, native Windows WASAPI tests, Chrome/WebRTC probes, Google Meet investigation, and finally deep TinyUSB/UAC panic instrumentation.</p>
+<p>The most important positive result was a native Windows WASAPI full-duplex soak that passed for nearly five minutes on firmware identity <code>0259</code>, recorded in <code>reports/windows-duplex/win-0259-duplex-5min.json</code>. That run captured 294.98 s of microphone audio while rendering 300.55 s of speaker output, with firmware speaker and microphone counters advancing and no USB transport errors, queue drops, short writes, or clipping. Chrome/WebRTC microphone capture also passed, including Meet-origin probes and a mixed Chrome microphone plus native speaker output test.</p>
+<p>The most important unresolved issue is that later firmware attempts regressed into a Windows native duplex failure where capture stops after about 0.2-0.28 s, playback stops after about 1.5 s, firmware stream counters do not advance, and the ESP32 reports reset reason <code>PANIC</code>. The latest durable breadcrumbs show the crash path happens around a standard USB <code>SET_INTERFACE</code> request (<code>bRequest=11</code>) for UAC1 microphone streaming interface <code>2</code>, alternate setting <code>0</code>, before speaker or microphone alt-setting counters advance. Commit <code>a5ba54e</code> removed one suspicious TinyUSB FIFO clear from that idle-alt path, but this turn was interrupted before rebuilding, OTA loading, and retesting that exact commit.</p>
+<h2 id="hardware-and-hosts">Hardware And Hosts</h2>
+<ul>
+<li>Device: Meerya ESP32-S3 on the larger Waveshare audio board.</li>
+<li>Main firmware profile: <code>waveshare-audio-uac-camera</code>.</li>
+<li>Normal build directory: <code>build-waveshare-audio-board-usb-camera</code>.</li>
+<li>Active Windows test machine: <code>WinBook-Air.local</code>, user <code>Daniel</code>.</li>
+<li>Meerya LAN address seen during final tests: <code>192.168.86.75</code>.</li>
+<li>Windows audio identity under test: <code>Meerya UAC1 48k Mono</code>.</li>
+<li>Windows host profile bcdDevice during final breadcrumb tests: <code>0x0249</code>.</li>
+<li>Test control paths used:</li>
+<ul>
+<li>OTA over <code>http://192.168.86.75/api/firmware/update</code>.</li>
+<li>Windows SSH/PowerShell through <code>scripts/winbook-ps.sh</code>.</li>
+<li>Browser installer at <code>https://syzygyx.github.io/meerya-esp32-installer/installer/</code>.</li>
+</ul>
+</ul>
+<h2 id="major-decisions">Major Decisions</h2>
+<h3 id="use-uac1-for-windows">Use UAC1 For Windows</h3>
+<p>The thread converged on UAC1 for Windows compatibility. UAC2 was kept in the codebase for macOS-style profiles, but the Windows descriptor path uses UAC1 at 48 kHz mono.</p>
+<p>Reasons:</p>
+<ul>
+<li>Windows was not behaving reliably with the earlier UAC2/feedback configuration.</li>
+<li>A reference USB audio descriptor showed a UAC-style adaptive OUT endpoint without a separate feedback endpoint.</li>
+<li>UAC1 is simpler and broadly supported by Windows class drivers.</li>
+</ul>
+<p>Tradeoffs noted:</p>
+<ul>
+<li>UAC1 is older and less expressive than UAC2.</li>
+<li>It is usually limited to simpler sample format/rate/control models.</li>
+<li>For this product, 48 kHz mono in/out is sufficient, so those disadvantages were acceptable.</li>
+</ul>
+<h3 id="prioritize-microphone-over-speaker-video-last">Prioritize Microphone Over Speaker, Video Last</h3>
+<p>The working product requirement was full-duplex speakerphone behavior, but microphone correctness was prioritized over speaker polish, and UVC camera support was moved to the bottom of the realtime priority list. UVC was backed out/disabled from the Windows focus path when it complicated audio validation.</p>
+<h3 id="default-to-web-installable-firmware">Default To Web-Installable Firmware</h3>
+<p>A recurring product requirement was that customers should be able to flash from a public GitHub Pages web installer. The source repo was updated so pushes to <code>meerya-esp32</code> can refresh the separate public installer repo, <code>meerya-esp32-installer</code>, via GitHub Actions and deploy tooling.</p>
+<p>Important files:</p>
+<ul>
+<li><code>.github/workflows/deploy-installer.yml</code></li>
+<li><code>scripts/update-web-installer-firmware.py</code></li>
+<li><code>scripts/deploy-web-installer.py</code></li>
+<li><code>docs/installer/index.html</code></li>
+<li><code>docs/installer/firmware/manifest.json</code></li>
+</ul>
+<h3 id="keep-windows-profile-switchable">Keep Windows Profile Switchable</h3>
+<p>The firmware supports saving a host profile in NVS and rebooting to switch descriptor sets. This matters because macOS and Windows prefer different USB audio behavior, especially around feedback/adaptive speaker OUT handling.</p>
+<h2 id="timeline">Timeline</h2>
+<p>Commit times below are local Mountain time from the repository history. The table is chronological so the test/debug sequence can be read without jumping between topic sections.</p>
+<h3 id="working-hours-metric">Working Hours Metric</h3>
+<p>This is an observed working-window metric based on the first and last named commit for each day, not a precise timesheet. It captures the visible span of implementation, test, and publish activity represented by the commits in this report.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Date</th><th>First named commit</th><th>Last named commit</th><th>Observed span</th><th>Named commits</th></tr></thead>
+<tbody>
+<tr><td>2026-07-01</td><td>09:13</td><td>18:47</td><td>9.6 h</td><td>13</td></tr>
+<tr><td>2026-07-02</td><td>12:08</td><td>18:53</td><td>6.8 h</td><td>8</td></tr>
+<tr><td>2026-07-07</td><td>12:38</td><td>23:52</td><td>11.2 h</td><td>7</td></tr>
+<tr><td>2026-07-08</td><td>03:05</td><td>05:27</td><td>2.4 h</td><td>13</td></tr>
+<tr><td>Total</td><td></td><td></td><td>29.9 h</td><td>41</td></tr>
+</tbody></table></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Time</th><th>Commit</th><th>Subject</th><th>Role in the week</th></tr></thead>
+<tbody>
+<tr><td>2026-07-01 09:13</td><td><code>cdf64a0</code></td><td>Fix UAC1 speaker OUT frame scheduling</td><td>Started the Windows UAC1 speaker scheduling fixes.</td></tr>
+<tr><td>2026-07-01 10:46</td><td><code>0bfa2f0</code></td><td>Fix Windows UAC1 WASAPI audio</td><td>Brought Windows WASAPI behavior into the main validation loop.</td></tr>
+<tr><td>2026-07-01 11:58</td><td><code>1a94c0f</code></td><td>Add far-field pickup beamforming controls</td><td>Added microphone pickup controls that were later deprioritized.</td></tr>
+<tr><td>2026-07-01 13:47</td><td><code>3bd337a</code></td><td>Automate web installer deploy</td><td>Created the automated public installer deployment path.</td></tr>
+<tr><td>2026-07-01 14:12</td><td><code>c330e53</code></td><td>Disable far-field beamforming by default</td><td>Reduced microphone processing risk while debugging USB transport.</td></tr>
+<tr><td>2026-07-01 14:26</td><td><code>bd10a3c</code></td><td>Add Windows audio validation helpers</td><td>Added host-side tooling for repeatable Windows evidence.</td></tr>
+<tr><td>2026-07-01 14:42</td><td><code>cd3164b</code></td><td>Refresh Windows UAC1 USB identity</td><td>Updated the Windows-facing USB product/profile identity.</td></tr>
+<tr><td>2026-07-01 14:48</td><td><code>2ade194</code></td><td>Use 10ms Windows UAC1 mic packets</td><td>Tried longer microphone packet cadence for Windows stability.</td></tr>
+<tr><td>2026-07-01 18:22</td><td><code>eda48e6</code></td><td>Fix Windows UAC1 microphone timing</td><td>Tightened microphone timing after packet-size experiments.</td></tr>
+<tr><td>2026-07-01 18:36</td><td><code>e931673</code></td><td>Build installer firmware during deploy</td><td>Made installer deployment build firmware in CI.</td></tr>
+<tr><td>2026-07-01 18:38</td><td><code>e26a2b7</code></td><td>Fetch submodules for installer firmware build</td><td>Fixed CI hydration for firmware dependencies.</td></tr>
+<tr><td>2026-07-01 18:41</td><td><code>af7353b</code></td><td>Hydrate TinyUSB component in installer CI</td><td>Ensured the deploy build used the expected TinyUSB component.</td></tr>
+<tr><td>2026-07-01 18:47</td><td><code>195444d</code></td><td>Include TinyUSB USBD patch in installer CI</td><td>Carried local TinyUSB USB-device changes into installer builds.</td></tr>
+<tr><td>2026-07-02 12:08</td><td><code>e9eca15</code></td><td>Gate installer audio tests on Meerya endpoints</td><td>Prevented installer audio tests from running before endpoints exist.</td></tr>
+<tr><td>2026-07-02 12:14</td><td><code>3a5cfe3</code></td><td>Add installer recording playback and waveform match</td><td>Added captured-audio playback and waveform comparison.</td></tr>
+<tr><td>2026-07-02 12:18</td><td><code>b23e1ea</code></td><td>Auto-populate installer audio devices</td><td>Reduced manual device selection in the browser installer.</td></tr>
+<tr><td>2026-07-02 13:28</td><td><code>b99227e</code></td><td>Use FFT plots for installer audio tests</td><td>Added spectral diagnostic plots to installer tests.</td></tr>
+<tr><td>2026-07-02 13:52</td><td><code>50fff2a</code></td><td>Use distinct duplex TFFT audio test</td><td>Made duplex validation easier to distinguish from simple loop tests.</td></tr>
+<tr><td>2026-07-02 15:02</td><td><code>f115a0c</code></td><td>Improve Windows duplex validation and web test</td><td>Tightened Windows duplex checks and browser test behavior.</td></tr>
+<tr><td>2026-07-02 16:00</td><td><code>334b0b8</code></td><td>Improve audio path and add installer speech WAV</td><td>Added speech stimulus and audio-path improvements.</td></tr>
+<tr><td>2026-07-02 18:53</td><td><code>ffa8f68</code></td><td>Smooth microphone capture pops</td><td>Addressed audible microphone capture artifacts.</td></tr>
+<tr><td>2026-07-07 12:38</td><td><code>41c64ab</code></td><td>Add Windows WebRTC microphone probe</td><td>Added automated browser/WebRTC microphone validation.</td></tr>
+<tr><td>2026-07-07 15:35</td><td><code>7c36538</code></td><td>Fix TinyUSB audio IN alt-setting check</td><td>Fixed an IN alt-setting check in the TinyUSB audio path.</td></tr>
+<tr><td>2026-07-07 15:44</td><td><code>228d408</code></td><td>Refresh installer firmware artifacts</td><td>Updated installer firmware artifacts after audio changes.</td></tr>
+<tr><td>2026-07-07 20:49</td><td><code>3112588</code></td><td>Try Windows UAC1 mic transport experiments</td><td>Started another round of microphone transport experiments.</td></tr>
+<tr><td>2026-07-07 21:02</td><td><code>7d8dfdd</code></td><td>Try single-function Windows UAC1 topology</td><td>Tested a simpler single-function descriptor topology.</td></tr>
+<tr><td>2026-07-07 21:10</td><td><code>00454a3</code></td><td>Try 10ms Windows UAC1 microphone interval</td><td>Retried 10 ms microphone interval behavior in the later topology.</td></tr>
+<tr><td>2026-07-07 23:52</td><td><code>73b0d51</code></td><td>Tune Windows UAC1 duplex recovery</td><td>Added recovery tuning before the successful July 8 native runs.</td></tr>
+<tr><td>2026-07-08 03:05</td><td><code>38990b3</code></td><td>Fix Windows UAC1 mic capture duration</td><td>Fixed short microphone capture duration in native Windows tests.</td></tr>
+<tr><td>2026-07-08 03:16</td><td><code>5678ab6</code></td><td>Validate Windows duplex as pass with timing warnings</td><td>Recorded pass criteria while keeping timing warnings visible.</td></tr>
+<tr><td>2026-07-08 03:24</td><td><code>816cda5</code></td><td>Record Windows duplex five minute soak</td><td>Captured the strongest native Windows full-duplex soak evidence.</td></tr>
+<tr><td>2026-07-08 03:54</td><td><code>cfe6966</code></td><td>Validate Chrome WebRTC mic path on Windows</td><td>Recorded Chrome/WebRTC microphone pass evidence.</td></tr>
+<tr><td>2026-07-08 04:21</td><td><code>ea512eb</code></td><td>Record mixed Chrome mic and native speaker duplex</td><td>Recorded mixed browser microphone plus native speaker evidence.</td></tr>
+<tr><td>2026-07-08 04:41</td><td><code>922163b</code></td><td>Improve Meerya build path and speaker diagnostics</td><td>Added build-path cleanup and speaker diagnostics before regression evidence.</td></tr>
+<tr><td>2026-07-08 04:53</td><td><code>ccc5498</code></td><td>Soften test tones and increase speaker queue margin</td><td>Reduced test-tone harshness and increased speaker queue margin.</td></tr>
+<tr><td>2026-07-08 04:59</td><td><code>e5f62af</code></td><td>Use softer chime test tones</td><td>Continued making repeated audio tests less unpleasant.</td></tr>
+<tr><td>2026-07-08 05:08</td><td><code>200e3e1</code></td><td>Add WinBook audio recovery tooling</td><td>Added Windows recovery tooling for stale/failed audio endpoint states.</td></tr>
+<tr><td>2026-07-08 05:11</td><td><code>8ad5e3d</code></td><td>Record UAC panic breadcrumbs</td><td>Added RTC breadcrumbs for the panic/reset investigation.</td></tr>
+<tr><td>2026-07-08 05:19</td><td><code>1ea19c7</code></td><td>Expose UAC request breadcrumbs</td><td>Exposed USB request-level panic context in status output.</td></tr>
+<tr><td>2026-07-08 05:24</td><td><code>e79bb11</code></td><td>Handle UAC idle alternate settings</td><td>Explicitly handled alternate setting 0 for speaker and microphone streams.</td></tr>
+<tr><td>2026-07-08 05:27</td><td><code>a5ba54e</code></td><td>Avoid clearing UAC IN FIFO on idle alt</td><td>Removed a suspicious manual IN FIFO clear from the idle microphone path.</td></tr>
+</tbody></table></div>
+<h3 id="2026-07-01-uac1-windows-bring-up">2026-07-01: UAC1 Windows Bring-Up</h3>
+<p>Key commits:</p>
+<ul>
+<li><code>cdf64a0</code> Fix UAC1 speaker OUT frame scheduling</li>
+<li><code>0bfa2f0</code> Fix Windows UAC1 WASAPI audio</li>
+<li><code>1a94c0f</code> Add far-field pickup beamforming controls</li>
+<li><code>c330e53</code> Disable far-field beamforming by default</li>
+<li><code>bd10a3c</code> Add Windows audio validation helpers</li>
+<li><code>cd3164b</code> Refresh Windows UAC1 USB identity</li>
+<li><code>2ade194</code> Use 10ms Windows UAC1 mic packets</li>
+<li><code>eda48e6</code> Fix Windows UAC1 microphone timing</li>
+<li><code>e931673</code>, <code>e26a2b7</code>, <code>af7353b</code>, <code>195444d</code> Make installer CI build and hydrate firmware artifacts.</li>
+</ul>
+<p>What changed:</p>
+<ul>
+<li>UAC1 descriptor work became the main Windows compatibility path.</li>
+<li>Early static/garbled speaker and microphone issues drove packet sizing and scheduling experiments.</li>
+<li>Far-field beamforming was added but then disabled by default after microphone reliability became higher priority.</li>
+<li>Windows validation scripts were added so tests could run remotely on WinBook rather than relying only on manual Voice Recorder or browser behavior.</li>
+<li>GitHub Pages installer deployment was automated enough that source pushes could refresh public installer artifacts.</li>
+</ul>
+<h3 id="2026-07-02-installer-ux-and-audio-test-improvements">2026-07-02: Installer UX And Audio Test Improvements</h3>
+<p>Key commits:</p>
+<ul>
+<li><code>e9eca15</code> Gate installer audio tests on Meerya endpoints</li>
+<li><code>3a5cfe3</code> Add installer recording playback and waveform match</li>
+<li><code>b23e1ea</code> Auto-populate installer audio devices</li>
+<li><code>b99227e</code> Use FFT plots for installer audio tests</li>
+<li><code>50fff2a</code> Use distinct duplex TFFT audio test</li>
+<li><code>f115a0c</code> Improve Windows duplex validation and web test</li>
+<li><code>334b0b8</code> Improve audio path and add installer speech WAV</li>
+<li><code>ffa8f68</code> Smooth microphone capture pops</li>
+</ul>
+<p>What changed:</p>
+<ul>
+<li>The web installer gained richer post-flash audio tests.</li>
+<li>Tests were organized toward input, output, and duplex.</li>
+<li>The UI began exposing waveform/FFT style diagnostics rather than only pass/fail text.</li>
+<li>Speech WAV support was added for a more realistic customer-facing test stimulus.</li>
+<li>Installer behavior was hardened:</li>
+<ul>
+<li>Audio tests grey out until Meerya appears as audio input/output.</li>
+<li>If already in app/audio mode, connect-and-flash behavior should be disabled.</li>
+<li>Results can show green/red status.</li>
+<li>Playback of recordings was added.</li>
+</ul>
+</ul>
+<p>Open issue from this area:</p>
+<ul>
+<li>The waveform mismatch logic reported suspicious <code>0% mismatch</code> at one point, then later poor matches. It was improved but remained less authoritative than direct Windows tests.</li>
+</ul>
+<h3 id="2026-07-07-google-meet-chrome-webrtc-focus">2026-07-07: Google Meet / Chrome / WebRTC Focus</h3>
+<p>Key commits:</p>
+<ul>
+<li><code>41c64ab</code> Add Windows WebRTC microphone probe</li>
+<li><code>7c36538</code> Fix TinyUSB audio IN alt-setting check</li>
+<li><code>228d408</code> Refresh installer firmware artifacts</li>
+<li><code>3112588</code> Try Windows UAC1 mic transport experiments</li>
+<li><code>7d8dfdd</code> Try single-function Windows UAC1 topology</li>
+<li><code>00454a3</code> Try 10ms Windows UAC1 microphone interval</li>
+<li><code>73b0d51</code> Tune Windows UAC1 duplex recovery</li>
+</ul>
+<p>What changed:</p>
+<ul>
+<li>Customer reported that Meerya could record in some apps but was not working in Google Meet.</li>
+<li>Automated WebRTC/Chrome probes were added to approximate browser and Meet audio behavior.</li>
+<li>Several UAC1 topology and interval experiments were tried to improve Windows capture stability.</li>
+</ul>
+<p>Evidence:</p>
+<ul>
+<li><code>reports/windows-meet-origin-webrtc-probe.json</code>: result <code>pass</code>.</li>
+<li><code>reports/windows-webrtc-meet-explicit-probe.json</code>: result <code>pass</code>.</li>
+<li><code>reports/windows-duplex/win-0259-webrtc-chrome-30s.json</code>: result <code>pass</code>.</li>
+</ul>
+<p>Interpretation:</p>
+<ul>
+<li>Chrome/WebRTC microphone capture could be made to work in automation.</li>
+<li>The user&#x27;s interactive Google Meet still displayed &quot;Microphone isn&#x27;t working&quot; at least once, so automated WebRTC pass was not treated as full customer-path proof.</li>
+</ul>
+<h3 id="2026-07-08-native-duplex-soak-regression-breadcrumbs">2026-07-08: Native Duplex, Soak, Regression, Breadcrumbs</h3>
+<p>Key successful commits and reports:</p>
+<ul>
+<li><code>38990b3</code> Fix Windows UAC1 mic capture duration.</li>
+<li><code>5678ab6</code> Validate Windows duplex as pass with timing warnings.</li>
+<li><code>816cda5</code> Record Windows duplex five minute soak.</li>
+<li><code>cfe6966</code> Validate Chrome WebRTC mic path on Windows.</li>
+<li><code>ea512eb</code> Record mixed Chrome mic and native speaker duplex.</li>
+</ul>
+<p>Best native Windows evidence:</p>
+<ul>
+<li>Report: <code>reports/windows-duplex/win-0259-duplex-5min.json</code></li>
+<li>Result: <code>pass</code></li>
+<li>Requested capture: 300 s.</li>
+<li>Returned capture: 294.98 s.</li>
+<li>Output stream duration: 300.55 s.</li>
+<li>Firmware speaker USB packets advanced: <code>300641</code>.</li>
+<li>Firmware microphone USB packets advanced: <code>60171</code>.</li>
+<li>Firmware speaker queue drops: <code>0</code>.</li>
+<li>Firmware microphone USB short writes: <code>0</code>.</li>
+<li>Capture clipping ratio: <code>0.0</code>.</li>
+<li>Warnings remained:</li>
+<ul>
+<li>Speaker task overruns: <code>33</code>.</li>
+<li>Speaker task late wakes: <code>3362</code>.</li>
+<li>Microphone task overruns: <code>1290</code>.</li>
+<li>Microphone task late wakes: <code>221</code>.</li>
+</ul>
+</ul>
+<p>Interpretation:</p>
+<ul>
+<li>Native Windows WASAPI duplex worked for a five-minute soak at one point.</li>
+<li>The timing warning counters showed we still had realtime margin work to do, but the warnings did not correspond to host stream truncation or transport errors in that run.</li>
+</ul>
+<p>Chrome/WebRTC evidence:</p>
+<ul>
+<li><code>reports/windows-duplex/win-0259-webrtc-chrome-30s.json</code>: result <code>pass</code>.</li>
+<li><code>reports/windows-duplex/win-0259-webrtc-chrome-mic-with-native-speaker-20s.json</code>: result <code>pass</code>.</li>
+<li><code>reports/windows-duplex/README.md</code> documents a mixed Chrome mic plus native Windows speaker output pass:</li>
+<ul>
+<li>Chrome WebRTC mic sent 20.00 s.</li>
+<li>Native speaker output rendered 25.42 s.</li>
+<li>Firmware speaker packets advanced by <code>5036</code>.</li>
+<li>Firmware microphone USB packets advanced by <code>10423</code>.</li>
+<li>No speaker errors, queue drops, microphone short writes, or partial packets.</li>
+</ul>
+</ul>
+<p>Remaining Chrome/Meet caveat:</p>
+<ul>
+<li>Chrome microphone/WebRTC send was validated.</li>
+<li>Chrome speaker rendering to Meerya through automation was not fully proven because SSH-launched Chrome may not drive the same interactive render path as a real user session.</li>
+<li>Google Meet still reported &quot;Microphone isn&#x27;t working&quot; in the user&#x27;s interactive session during the thread, so customer-path Meet validation remains open.</li>
+</ul>
+<h2 id="later-2026-07-08-regression-and-debugging">Later 2026-07-08 Regression And Debugging</h2>
+<p>After the five-minute pass, later changes for speaker diagnostics, softer tones, recovery tooling, and panic breadcrumbs exposed or introduced a persistent native Windows duplex failure.</p>
+<p>Key commits:</p>
+<ul>
+<li><code>922163b</code> Improve Meerya build path and speaker diagnostics.</li>
+<li><code>ccc5498</code> Soften test tones and increase speaker queue margin.</li>
+<li><code>e5f62af</code> Use softer chime test tones.</li>
+<li><code>200e3e1</code> Add WinBook audio recovery tooling.</li>
+<li><code>8ad5e3d</code> Record UAC panic breadcrumbs.</li>
+<li><code>1ea19c7</code> Expose UAC request breadcrumbs.</li>
+<li><code>e79bb11</code> Handle UAC idle alternate settings.</li>
+<li><code>a5ba54e</code> Avoid clearing UAC IN FIFO on idle alt.</li>
+</ul>
+<h3 id="recovery-tooling">Recovery Tooling</h3>
+<p>Commit <code>200e3e1</code> added:</p>
+<ul>
+<li><code>scripts/winbook-ps.sh</code></li>
+<li><code>scripts/windows_meerya_recover_audio.ps1</code></li>
+<li>Additional Windows duplex evidence reports.</li>
+</ul>
+<p>The local Codex skill was also updated outside the repo to avoid PowerShell quoting failures. The preferred pattern became:</p>
+<pre><code class="language-bash">scripts/winbook-ps.sh &lt;&lt;&#x27;PS&#x27;
+Set-StrictMode -Version Latest
+Set-Location C:\Users\Daniel\meerya-flash
+# Windows commands here
+exit $LASTEXITCODE
+PS</code></pre>
+<h3 id="mic-only-pass-after-recovery">Mic-Only Pass After Recovery</h3>
+<p>Report: <code>reports/windows-duplex/win-mic-only-after-recover-e5f62af.json</code></p>
+<p>Result: <code>pass</code>.</p>
+<p>Interpretation:</p>
+<ul>
+<li>Windows microphone-only capture could still work after recovery.</li>
+<li>This suggested the device was not fundamentally unable to present a usable UAC1 microphone endpoint.</li>
+</ul>
+<h3 id="native-duplex-failure-after-mic-pass">Native Duplex Failure After Mic Pass</h3>
+<p>Report: <code>reports/windows-duplex/win-duplex-after-mic-pass-e5f62af.json</code></p>
+<p>Result: <code>fail</code>.</p>
+<p>Key failures:</p>
+<ul>
+<li>Capture duration too short: <code>0.200 s</code>.</li>
+<li>Capture/playback ratio too short.</li>
+<li>Firmware speaker packet counter did not advance.</li>
+<li>Firmware microphone packet counter did not advance.</li>
+</ul>
+<p>Interpretation:</p>
+<ul>
+<li>Full duplex was failing even when mic-only had just passed.</li>
+<li>The firmware appeared to reset or lose the active stream path before counters could advance.</li>
+</ul>
+<h3 id="breadcrumb-instrumentation">Breadcrumb Instrumentation</h3>
+<p>Commit <code>8ad5e3d</code> added RTC no-init breadcrumbs for UAC stages so the device could report where it was before a panic reset.</p>
+<p>Commit <code>1ea19c7</code> expanded those breadcrumbs to include USB request details:</p>
+<ul>
+<li><code>last_uac_bm_request_type</code></li>
+<li><code>last_uac_request</code></li>
+<li><code>last_uac_value</code></li>
+<li><code>last_uac_index</code></li>
+<li><code>last_uac_itf</code></li>
+<li><code>last_uac_alt</code></li>
+<li><code>last_uac_func_id</code></li>
+<li><code>last_uac_ep</code></li>
+<li><code>last_uac_nbytes</code></li>
+</ul>
+<p>These fields are exposed in <code>/api/status</code> under <code>audio_runtime</code>.</p>
+<h3 id="request-level-failure-evidence">Request-Level Failure Evidence</h3>
+<p>Report: <code>reports/windows-duplex/win-duplex-1ea19c7-request-breadcrumbs.json</code></p>
+<p>Result: <code>fail</code>.</p>
+<p>Key host facts:</p>
+<ul>
+<li>Input: <code>Microphone (84- Meerya UAC1 48k Mono)</code>.</li>
+<li>Output: <code>Speakers (84- Meerya UAC1 48k Mono)</code>.</li>
+<li>Capture duration: <code>0.280 s</code>.</li>
+<li>Output duration: <code>1.500 s</code>.</li>
+<li>Firmware speaker packet delta: <code>0</code>.</li>
+<li>Firmware microphone packet delta: <code>0</code>.</li>
+</ul>
+<p>Post-failure status: <code>reports/windows-duplex/status-after-win-duplex-1ea19c7-request-breadcrumbs.json</code></p>
+<p>Key status facts:</p>
+<ul>
+<li>Reset reason: <code>PANIC</code>.</li>
+<li>Last UAC stage: <code>set_itf</code>.</li>
+<li><code>last_uac_request</code>: <code>11</code>, standard USB <code>SET_INTERFACE</code>.</li>
+<li><code>last_uac_itf</code>: <code>2</code>.</li>
+<li><code>last_uac_alt</code>: <code>0</code>.</li>
+<li>Speaker alt set count: <code>0</code>.</li>
+<li>Microphone alt set count: <code>0</code>.</li>
+<li>Speaker USB packets: <code>0</code>.</li>
+<li>Microphone USB packets: <code>0</code>.</li>
+</ul>
+<p>Interpretation:</p>
+<ul>
+<li>Windows was sending <code>SET_INTERFACE</code> to interface <code>2</code>, alternate <code>0</code>.</li>
+<li>In the current Windows UAC1 descriptor, interface <code>2</code> is the microphone streaming interface.</li>
+<li>The crash occurs before the app sees a microphone or speaker alt-setting open and before audio packets move.</li>
+</ul>
+<h3 id="idle-alternate-setting-patch">Idle Alternate Setting Patch</h3>
+<p>Commit <code>e79bb11</code> made <code>tud_audio_set_itf_cb()</code> explicitly handle alternate setting <code>0</code> for speaker and microphone by deactivating stream state. This was based on reading the managed TinyUSB audio driver, which calls the app <code>set_itf_cb</code> even when it finds the zero-endpoint alternate setting.</p>
+<p>Report: <code>reports/windows-duplex/win-duplex-e79bb11-uac-idle-alt.json</code></p>
+<p>Result: <code>fail</code>.</p>
+<p>Key facts:</p>
+<ul>
+<li>Capture duration: <code>0.210 s</code>.</li>
+<li>Output duration: <code>1.530 s</code>.</li>
+<li>Firmware speaker packet delta: <code>0</code>.</li>
+<li>Firmware microphone packet delta: <code>0</code>.</li>
+</ul>
+<p>Post-failure status: <code>reports/windows-duplex/status-after-win-duplex-e79bb11-uac-idle-alt.json</code></p>
+<p>Key status facts:</p>
+<ul>
+<li>Reset reason: <code>PANIC</code>.</li>
+<li>Last UAC stage: <code>set_mic_idle</code>.</li>
+<li><code>last_uac_request</code>: <code>11</code>.</li>
+<li><code>last_uac_itf</code>: <code>2</code>.</li>
+<li><code>last_uac_alt</code>: <code>0</code>.</li>
+<li>Speaker alt set count: <code>0</code>.</li>
+<li>Microphone alt set count: <code>0</code>.</li>
+</ul>
+<p>Interpretation:</p>
+<ul>
+<li>The new idle-alt branch executed.</li>
+<li>The panic still happened, now definitely associated with the <code>set_mic_idle</code> deactivation path or TinyUSB&#x27;s immediate handling after it.</li>
+</ul>
+<h3 id="latest-narrow-patch">Latest Narrow Patch</h3>
+<p>Commit: <code>a5ba54e</code> Avoid clearing UAC IN FIFO on idle alt.</p>
+<p>Reason:</p>
+<ul>
+<li><code>set_mic_idle</code> called <code>tud_audio_n_clear_ep_in_ff(MEERYA_UAC_MIC_FUNC_ID)</code>.</li>
+<li>TinyUSB already clears FIFOs when it actually closes an active endpoint.</li>
+<li>In the zero-endpoint alternate setting path, manually clearing the IN FIFO from the app callback may be unsafe or redundant.</li>
+</ul>
+<p>Status:</p>
+<ul>
+<li>The patch was committed and pushed.</li>
+<li>The previous work turn was interrupted before rebuilding exact commit metadata, OTA loading <code>a5ba54e</code>, and rerunning the Windows duplex test.</li>
+</ul>
+<h2 id="web-installer-work">Web Installer Work</h2>
+<p>The public installer became a product requirement, not only a developer convenience. It was expected to:</p>
+<ul>
+<li>Flash Meerya from GitHub Pages.</li>
+<li>Show the specific firmware commit/build identity.</li>
+<li>Reset into app mode after flashing.</li>
+<li>Detect whether Meerya is in bootloader or app/audio mode.</li>
+<li>Grey out connect/flash when the device is already in app/audio mode.</li>
+<li>Run post-flash tests once audio devices are available.</li>
+<li>Indicate tests running.</li>
+<li>Show green/red pass/fail states.</li>
+<li>Offer playback of captured recordings.</li>
+<li>Run input, output, and duplex tests.</li>
+<li>Show waveform/FFT/TFFT-style plots for comparison.</li>
+</ul>
+<p>Important implementation commits:</p>
+<ul>
+<li><code>3bd337a</code> Automate web installer deploy.</li>
+<li><code>e931673</code> Build installer firmware during deploy.</li>
+<li><code>e26a2b7</code> Fetch submodules for installer firmware build.</li>
+<li><code>af7353b</code> Hydrate TinyUSB component in installer CI.</li>
+<li><code>195444d</code> Include TinyUSB USBD patch in installer CI.</li>
+<li><code>e9eca15</code> Gate installer audio tests on Meerya endpoints.</li>
+<li><code>3a5cfe3</code> Add installer recording playback and waveform match.</li>
+<li><code>b23e1ea</code> Auto-populate installer audio devices.</li>
+<li><code>b99227e</code> Use FFT plots for installer audio tests.</li>
+<li><code>50fff2a</code> Use distinct duplex TFFT audio test.</li>
+<li><code>334b0b8</code> Add installer speech WAV.</li>
+</ul>
+<p>Open installer issues:</p>
+<ul>
+<li>Waveform matching was not yet trusted as a definitive pass/fail signal.</li>
+<li>Some tests still depended on browser/device-permission behavior.</li>
+<li>Public Pages deployment occasionally queued or appeared stuck; the eventual path was to deploy through the separate installer repo.</li>
+</ul>
+<h2 id="mac-linux-vm-findings">Mac / Linux / VM Findings</h2>
+<p>Mac was useful for build, OTA, and some local audio sanity checks. The PWA speakerphone test and triggered tones could sound clean on Mac, which helped distinguish firmware audio path issues from Windows/VM transport issues.</p>
+<p>Parallels and VM-based Windows/Linux testing were unreliable for USB audio timing. The thread moved toward native Windows on WinBook because VM timing and USB pass-through could obscure real UAC behavior.</p>
+<p>Debian and Parallels were used during the investigation, but native Windows became the authoritative target for customer compatibility.</p>
+<h2 id="google-meet-findings">Google Meet Findings</h2>
+<p>The customer reported that recording from Meerya worked, but Google Meet did not. The user also saw a &quot;Microphone isn&#x27;t working&quot; message in Google Meet.</p>
+<p>Automated evidence:</p>
+<ul>
+<li><code>reports/windows-meet-origin-webrtc-probe.json</code>: pass.</li>
+<li><code>reports/windows-webrtc-meet-explicit-probe.json</code>: pass.</li>
+<li>Chrome/WebRTC microphone tests passed with Meerya selected.</li>
+</ul>
+<p>Remaining gap:</p>
+<ul>
+<li>Automated WebRTC probes are encouraging but not full proof that Google Meet&#x27;s interactive UI and permissions path works for a customer.</li>
+<li>Chrome speaker output to Meerya through SSH automation is especially suspect because SSH-launched Chrome may not render through the same desktop audio session.</li>
+</ul>
+<h2 id="audio-quality-findings">Audio Quality Findings</h2>
+<p>Problems observed:</p>
+<ul>
+<li>Static/garbled speaker output.</li>
+<li>Static/garbled microphone recordings.</li>
+<li>Clicking from speaker.</li>
+<li>Crackly tone on macOS at some points.</li>
+<li>Voice sounded garbled in some builds.</li>
+<li>Microphone recording had occasional pops.</li>
+<li>Web output test sometimes reported clipping.</li>
+</ul>
+<p>Mitigations attempted:</p>
+<ul>
+<li>Switched to UAC1 Windows descriptor.</li>
+<li>Tried 48 kHz mono.</li>
+<li>Prioritized microphone path.</li>
+<li>Adjusted mic packet sizes and service intervals.</li>
+<li>Tried 1 ms, 2 ms, 5 ms, 10 ms, and batched Windows UAC1 mic packet strategies.</li>
+<li>Added USB mic diagnostic tone.</li>
+<li>Added timing and packet counters.</li>
+<li>Increased speaker queue margin.</li>
+<li>Changed test tones to softer chimes to make repeated tests less unpleasant.</li>
+<li>Added speech WAV stimulus to installer.</li>
+<li>Smoothed microphone capture pops.</li>
+</ul>
+<p>Current quality state:</p>
+<ul>
+<li>There is proof that a previous Windows native duplex build could run long enough for a five-minute soak.</li>
+<li>Later builds are failing before audio counters advance, so current audio quality cannot be evaluated until the panic/regression is resolved.</li>
+</ul>
+<h2 id="important-evidence-files">Important Evidence Files</h2>
+<p>Positive or partly positive:</p>
+<ul>
+<li><code>reports/windows-duplex/win-0259-duplex-5min.json</code></li>
+<li><code>reports/windows-duplex/README.md</code></li>
+<li><code>reports/windows-duplex/win-0259-webrtc-chrome-30s.json</code></li>
+<li><code>reports/windows-duplex/win-0259-webrtc-chrome-mic-with-native-speaker-20s.json</code></li>
+<li><code>reports/windows-duplex/win-mic-only-after-recover-e5f62af.json</code></li>
+<li><code>reports/windows-meet-origin-webrtc-probe.json</code></li>
+<li><code>reports/windows-webrtc-meet-explicit-probe.json</code></li>
+</ul>
+<p>Regression/failure evidence:</p>
+<ul>
+<li><code>reports/windows-duplex/win-duplex-after-mic-pass-e5f62af.json</code></li>
+<li><code>reports/windows-duplex/win-922163b-native-duplex-20s-fail-stale-endpoint.json</code></li>
+<li><code>reports/windows-duplex/win-ccc5498-native-duplex-pleasant-10s-fail-stale-endpoint.json</code></li>
+<li><code>reports/windows-duplex/win-duplex-1ea19c7-request-breadcrumbs.json</code></li>
+<li><code>reports/windows-duplex/status-after-win-duplex-1ea19c7-request-breadcrumbs.json</code></li>
+<li><code>reports/windows-duplex/win-duplex-e79bb11-uac-idle-alt.json</code></li>
+<li><code>reports/windows-duplex/status-after-win-duplex-e79bb11-uac-idle-alt.json</code></li>
+</ul>
+<p>OTA evidence:</p>
+<ul>
+<li><code>reports/ota/ota-1ea19c7-uac-request-breadcrumbs.json</code></li>
+<li><code>reports/ota/ota-e79bb11-uac-idle-alt.json</code></li>
+<li><code>reports/ota/ota-8ad5e3d-uac-breadcrumbs.json</code></li>
+<li><code>reports/ota/ota-922163b-speaker-diagnostics.json</code></li>
+</ul>
+<h2 id="current-known-state-at-interruption">Current Known State At Interruption</h2>
+<p>Latest pushed commit:</p>
+<ul>
+<li><code>a5ba54e</code> Avoid clearing UAC IN FIFO on idle alt.</li>
+</ul>
+<p>Verified before interruption:</p>
+<ul>
+<li><code>a5ba54e</code> was committed and pushed.</li>
+<li>The previous build before <code>a5ba54e</code> compiled.</li>
+<li><code>e79bb11</code> OTA loaded successfully.</li>
+<li><code>e79bb11</code> still failed Windows native duplex and reported <code>PANIC</code> after <code>set_mic_idle</code>.</li>
+</ul>
+<p>Not yet verified:</p>
+<ul>
+<li><code>a5ba54e</code> exact commit build.</li>
+<li>OTA load of <code>a5ba54e</code>.</li>
+<li>Windows native duplex retest after removing the manual IN FIFO clear.</li>
+</ul>
+<p>Worktree note:</p>
+<ul>
+<li>Source code was clean after the <code>a5ba54e</code> commit, aside from many untracked report files accumulated during the week.</li>
+</ul>
+<h2 id="most-likely-next-steps">Most Likely Next Steps</h2>
+<ol>
+<li>Build exact <code>a5ba54e</code> metadata.</li>
+</ol>
+<pre><code class="language-bash">   export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
+   export IDF_PYTHON_ENV_PATH=/Users/danielmcshan/.espressif/python_env/idf5.5_py3.14_env
+   . scripts/idf-env.sh &gt;/dev/null
+   PROFILE=waveshare-audio-uac-camera \
+   BUILD_DIR=&quot;$PWD/build-waveshare-audio-board-usb-camera&quot; \
+   idf.py -B &quot;$PWD/build-waveshare-audio-board-usb-camera&quot; build</code></pre>
+<ol>
+<li>OTA <code>a5ba54e</code> to Meerya.</li>
+</ol>
+<pre><code class="language-bash">   scripts/meerya-ota-upload.py \
+     --status-url http://192.168.86.75 \
+     --binary build-waveshare-audio-board-usb-camera/meerya_esp32.bin \
+     --reboot \
+     --report-json reports/ota/ota-a5ba54e-uac-idle-no-fifo-clear.json</code></pre>
+<ol>
+<li>Rerun native Windows WASAPI duplex on WinBook using <code>scripts/winbook-ps.sh</code>.</li>
+</ol>
+<ol>
+<li>Capture post-test <code>/api/status</code> and inspect:</li>
+</ol>
+<ul>
+<li><code>runtime.reset_reason_name</code></li>
+<li><code>audio_runtime.last_uac_stage</code></li>
+<li><code>audio_runtime.last_uac_request</code></li>
+<li><code>audio_runtime.last_uac_itf</code></li>
+<li><code>audio_runtime.last_uac_alt</code></li>
+<li><code>speaker_alt_set_count</code></li>
+<li><code>microphone_alt_set_count</code></li>
+<li><code>speaker_usb_packets</code></li>
+<li><code>microphone_usb_packets</code></li>
+</ul>
+<ol>
+<li>If still <code>PANIC</code> at <code>set_mic_idle</code>, add deeper panic/backtrace support:</li>
+</ol>
+<ul>
+<li>Enable coredump-to-flash for this profile, or</li>
+<li>Add a temporary serial/Wi-Fi log capture around TinyUSB SET_INTERFACE handling, or</li>
+<li>Patch TinyUSB managed component to breadcrumb immediately after each internal SET_INTERFACE step.</li>
+</ul>
+<ol>
+<li>Once panic is resolved, rerun:</li>
+</ol>
+<ul>
+<li>Native Windows mic-only.</li>
+<li>Native Windows output-only.</li>
+<li>Native Windows full duplex 10 s.</li>
+<li>Native Windows full duplex 5 min soak.</li>
+<li>Chrome/WebRTC microphone.</li>
+<li>Mixed Chrome mic plus native speaker.</li>
+<li>Interactive Google Meet test.</li>
+</ul>
+<h2 id="bottom-line">Bottom Line</h2>
+<p>We proved that Meerya can do long-running native Windows duplex at least once on the UAC1 48 kHz mono profile, and we built substantial test infrastructure around that. We also proved Chrome/WebRTC microphone capture can work. The current blocking technical issue is a later-regression Windows native duplex panic around UAC1 microphone <code>SET_INTERFACE alt 0</code>, before audio stream counters advance. The latest pushed patch, <code>a5ba54e</code>, is the next thing to OTA and test because it removes a suspicious TinyUSB FIFO clear from that exact idle-alt path.</p>
+  </main>
+</body>
+</html>
