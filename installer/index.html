@@ -1485,13 +1485,17 @@
       return { pcm, sampleRate };
     }
 
-    function generateTonePcm(sampleRate = 48000, durationSeconds = 3.0, frequencyHz = 1000, gain = 0.25) {
+    function generateTonePcm(sampleRate = 48000, durationSeconds = 3.0, frequencyHz = 523.25, gain = 0.12) {
       const sampleCount = Math.round(sampleRate * durationSeconds);
       const pcm = new Float32Array(sampleCount);
       for (let i = 0; i < sampleCount; ++i) {
         const t = i / sampleRate;
         const envelope = Math.min(1, t / 0.08, (durationSeconds - t) / 0.08);
-        pcm[i] = gain * envelope * Math.sin(2 * Math.PI * frequencyHz * t);
+        pcm[i] = gain * envelope * (
+          0.68 * Math.sin(2 * Math.PI * frequencyHz * t) +
+          0.22 * Math.sin(2 * Math.PI * frequencyHz * 1.25 * t) +
+          0.10 * Math.sin(2 * Math.PI * frequencyHz * 1.5 * t)
+        );
       }
       return { pcm, sampleRate, frequencyHz };
     }
