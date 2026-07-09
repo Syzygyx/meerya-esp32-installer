@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-08T21:34:47Z",
-  "gitHead": "49160723585b",
+  "generatedAt": "2026-07-09T03:03:45Z",
+  "gitHead": "b17122068ee4",
   "defaultTarget": "waveshare-audio-board-uac1-audio",
   "targets": [
     {
@@ -12,7 +12,7 @@
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer firmware. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
+      "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer firmware. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), AEC disabled, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
       "status": "ci-built-current-main",
       "quickTest": {
         "statusUrls": [
@@ -26,7 +26,18 @@
           "http://192.168.4.1/app"
         ],
         "cameraPath": "/camera.jpg",
-        "cameraExpected": false
+        "cameraExpected": false,
+        "audioExpected": {
+          "aecEnabled": false,
+          "microphone": {
+            "sampleRateHz": 48000,
+            "channels": 1,
+            "intervalMs": 1,
+            "resolutionBits": 16,
+            "packetBytes": 96,
+            "packetHz": 1000
+          }
+        }
       },
       "files": [
         {
@@ -34,7 +45,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "716517a05f6b1fce5224c6fa8108603adbcd9f8398bc98cff433e63245f0e424"
+          "sha256": "f2d1a3e53440c54da1d4e2c011529a7a800032def27b4773b73cd5cdd50178d2"
         },
         {
           "address": 32768,
@@ -54,8 +65,8 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
-          "size": 1369520,
-          "sha256": "6c881f2c62f21d3bda0d6973503798d39db7a565e1909198a5478d176f9c3001"
+          "size": 1369152,
+          "sha256": "63ee2d9cf6c2aacd87ae6ab22c6eb580e4dcc814c29fbf966c53e424c2db939f"
         }
       ]
     }

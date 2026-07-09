@@ -285,6 +285,24 @@
       font-weight: 700;
     }
 
+    .quick-test-results li[data-result="pass"] {
+      border-color: color-mix(in srgb, var(--ok) 50%, var(--line));
+      color: color-mix(in srgb, var(--ok) 55%, var(--ink));
+    }
+
+    .quick-test-results li[data-result="fail"] {
+      border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+      color: color-mix(in srgb, var(--warn) 70%, var(--ink));
+    }
+
+    .quick-test-results li[data-result="pass"] b {
+      color: var(--ok);
+    }
+
+    .quick-test-results li[data-result="fail"] b {
+      color: var(--warn);
+    }
+
     .quick-test-links {
       display: flex;
       flex-wrap: wrap;
@@ -619,6 +637,7 @@
           <div><strong>Firmware commit:</strong> <code id="firmwareCommit">Loading</code></div>
           <div><strong>Generated:</strong> <code id="manifestGenerated">Loading</code></div>
           <div><strong>Status:</strong> <code id="targetStatus">Loading</code></div>
+          <div><strong>Audio contract:</strong> <code id="audioContract">Loading</code></div>
         </div>
 
         <div class="file-list" id="fileList"></div>
@@ -808,6 +827,7 @@
       firmwareCommit: document.getElementById("firmwareCommit"),
       manifestGenerated: document.getElementById("manifestGenerated"),
       targetStatus: document.getElementById("targetStatus"),
+      audioContract: document.getElementById("audioContract"),
       fileList: document.getElementById("fileList"),
       connectBtn: document.getElementById("connectBtn"),
       flashBtn: document.getElementById("flashBtn"),
@@ -913,7 +933,7 @@
 
     function addQuickTestResult(label, value, ok = null) {
       const item = document.createElement("li");
-      const result = ok === true ? "pass" : ok === false ? "check" : "info";
+      const result = ok === true ? "pass" : ok === false ? "fail" : "info";
       item.innerHTML = `<span>${label}</span><b>${value}</b>`;
       item.dataset.result = result;
       els.quickTestResults.appendChild(item);
@@ -2096,11 +2116,53 @@
       return `${url}${separator}t=${encodeURIComponent(String(token))}`;
     }
 
+    function expectedAudio(target = state.target) {
+      return target?.quickTest?.audioExpected ?? null;
+    }
+
+    function formatAudioContract(target = state.target) {
+      const expected = expectedAudio(target);
+      const mic = expected?.microphone;
+      if (!mic) {
+        return "unknown";
+      }
+      const aec = expected.aecEnabled ? "AEC on" : "AEC off";
+      return `${mic.sampleRateHz} Hz, ${mic.channels} ch, ${mic.intervalMs} ms, ${mic.packetBytes} B @ ${mic.packetHz} Hz, ${aec}`;
+    }
+
+    function firmwareAudioContractResult(status, target = state.target) {
+      const expected = expectedAudio(target);
+      const mic = expected?.microphone;
+      if (!mic || !status) {
+        return { ok: null, text: "manifest expectation unavailable" };
+      }
+      const failures = [];
+      if (status.sample_rate_hz !== mic.sampleRateHz) {
+        failures.push(`sample ${status.sample_rate_hz ?? "?"}`);
+      }
+      if (status.microphone_channels !== mic.channels) {
+        failures.push(`mic ch ${status.microphone_channels ?? "?"}`);
+      }
+      const runtimeIntervalMs = Math.round(Number(status.audio_runtime?.microphone_task_service_interval_us ?? 0) / 1000);
+      if (Number.isFinite(runtimeIntervalMs) && runtimeIntervalMs > 0 && runtimeIntervalMs !== mic.intervalMs) {
+        failures.push(`mic interval ${runtimeIntervalMs} ms`);
+      }
+      const actualAec = Boolean(status.audio_settings?.aec_enabled);
+      if (actualAec !== Boolean(expected.aecEnabled)) {
+        failures.push(`AEC ${actualAec ? "on" : "off"}`);
+      }
+      if (failures.length) {
+        return { ok: false, text: failures.join(", ") };
+      }
+      return { ok: true, text: formatAudioContract(target) };
+    }
+
     function renderTarget(target) {
       state.target = target;
       els.firmwareCommit.textContent = state.manifest?.gitHead || "unknown";
       els.manifestGenerated.textContent = state.manifest?.generatedAt || "unknown";
       els.targetStatus.textContent = target.status || "unknown";
+      els.audioContract.textContent = formatAudioContract(target);
       els.fileList.innerHTML = "";
       target.files.forEach((file) => {
         const row = document.createElement("div");
@@ -2329,14 +2391,27 @@
       const cameraPath = quickTest.cameraPath ?? "/camera.jpg";
 
       resetQuickTest("Waiting for reboot", "idle");
+      addQuickTestResult("Expected audio", formatAudioContract(target), true);
       appendLog("Post-flash test: waiting for Meerya to reboot...\n");
       await delay(6000);
 
       els.quickTestState.textContent = "Checking status";
       let reachableBase = null;
+      let readableStatus = null;
+      let readableStatusUrl = null;
       for (let attempt = 0; attempt < 8 && reachableBase === null; ++attempt) {
         for (const url of statusUrls) {
           appendLog(`Post-flash test: probing ${url}\n`);
+          if (readableStatus === null) {
+            try {
+              readableStatus = await fetchJsonWithTimeout(url, 2200);
+              readableStatusUrl = url;
+              reachableBase = url.replace(/\/api\/status$/, "");
+              break;
+            } catch (error) {
+              appendLog(`Post-flash test: JSON status unavailable at ${url}: ${error.message}\n`);
+            }
+          }
           if (await probeOpaqueUrl(url, 2200)) {
             reachableBase = url.replace(/\/api\/status$/, "");
             break;
@@ -2357,6 +2432,17 @@
         els.quickTestPanel.dataset.state = "pass";
         els.quickTestState.textContent = "Status reachable";
         appendLog(`Post-flash test: status reachable at ${reachableBase}\n`);
+      }
+
+      if (readableStatus !== null) {
+        const contract = firmwareAudioContractResult(readableStatus, target);
+        addQuickTestResult("Firmware audio", contract.text, contract.ok);
+        if (!contract.ok) {
+          els.quickTestPanel.dataset.state = "fail";
+        }
+        appendLog(`Post-flash test: readable status ${readableStatusUrl}\n`);
+      } else {
+        addQuickTestResult("Firmware audio", "status JSON not readable", null);
       }
 
       if (cameraExpected) {
