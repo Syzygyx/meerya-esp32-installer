@@ -252,6 +252,20 @@
       gap: 10px;
     }
 
+    .quick-test-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .quick-test-actions button {
+      min-height: 32px;
+      padding: 0 10px;
+      font-size: 0.85rem;
+    }
+
     .quick-test-head strong {
       font-size: 0.95rem;
     }
@@ -661,7 +675,10 @@
         <div class="quick-test" id="quickTestPanel" data-state="idle">
           <div class="quick-test-head">
             <strong>Post-Flash Test</strong>
-            <span id="quickTestState">Not run</span>
+            <div class="quick-test-actions">
+              <button id="copyStatusBtn" type="button" disabled>Copy Status JSON</button>
+              <span id="quickTestState">Not run</span>
+            </div>
           </div>
           <ul class="quick-test-results" id="quickTestResults"></ul>
           <div class="quick-test-links" id="quickTestLinks"></div>
@@ -818,6 +835,7 @@
       audioAutoRunCompleted: false,
       audioAutoRunInProgress: false,
       audioRecordingUrls: [],
+      lastFirmwareStatusPayload: null,
     };
 
     const els = {
@@ -837,6 +855,7 @@
       progressText: document.getElementById("progressText"),
       quickTestPanel: document.getElementById("quickTestPanel"),
       quickTestState: document.getElementById("quickTestState"),
+      copyStatusBtn: document.getElementById("copyStatusBtn"),
       quickTestResults: document.getElementById("quickTestResults"),
       quickTestLinks: document.getElementById("quickTestLinks"),
       wifiSetupPanel: document.getElementById("wifiSetupPanel"),
@@ -928,7 +947,56 @@
       els.quickTestState.textContent = stateText;
       els.quickTestResults.innerHTML = "";
       els.quickTestLinks.innerHTML = "";
+      state.lastFirmwareStatusPayload = null;
+      els.copyStatusBtn.disabled = true;
+      els.copyStatusBtn.textContent = "Copy Status JSON";
       hideWifiSetup();
+    }
+
+    function rememberFirmwareStatus(url, status) {
+      state.lastFirmwareStatusPayload = {
+        copiedAt: new Date().toISOString(),
+        sourceUrl: url,
+        status,
+      };
+      els.copyStatusBtn.disabled = false;
+      els.copyStatusBtn.textContent = "Copy Status JSON";
+    }
+
+    async function writeClipboardText(text) {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (!document.execCommand("copy")) {
+          throw new Error("copy command rejected");
+        }
+      } finally {
+        textarea.remove();
+      }
+    }
+
+    async function copyLatestFirmwareStatus() {
+      if (!state.lastFirmwareStatusPayload) {
+        throw new Error("No readable firmware status has been captured yet.");
+      }
+      const text = JSON.stringify(state.lastFirmwareStatusPayload, null, 2);
+      await writeClipboardText(text);
+      els.copyStatusBtn.textContent = "Copied";
+      appendLog(`Copied firmware status JSON from ${state.lastFirmwareStatusPayload.sourceUrl}\n`);
+      setTimeout(() => {
+        if (state.lastFirmwareStatusPayload) {
+          els.copyStatusBtn.textContent = "Copy Status JSON";
+        }
+      }, 1800);
     }
 
     function addQuickTestResult(label, value, ok = null) {
@@ -2435,6 +2503,7 @@
       }
 
       if (readableStatus !== null) {
+        rememberFirmwareStatus(readableStatusUrl, readableStatus);
         const contract = firmwareAudioContractResult(readableStatus, target);
         addQuickTestResult("Firmware audio", contract.text, contract.ok);
         if (!contract.ok) {
@@ -2553,6 +2622,7 @@
     els.connectBtn.addEventListener("click", () => connect().catch(handleError));
     els.flashBtn.addEventListener("click", () => flash().catch(handleError));
     els.disconnectBtn.addEventListener("click", () => disconnect().catch(handleError));
+    els.copyStatusBtn.addEventListener("click", () => copyLatestFirmwareStatus().catch(handleError));
     els.audioRefreshBtn.addEventListener("click", () => refreshAudioDevices().catch(handleError));
     els.audioHostToMeeryaBtn.addEventListener("click", () => runAudioPathTest({
       label: "Computer to Meerya mic",
