@@ -149,6 +149,36 @@
       margin: 0 0 14px;
       color: var(--muted);
     }
+    .live-stats-head {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .live-stats-state {
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .live-stats-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .live-stats-actions button {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      background: var(--panel);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .live-stats-actions button:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
     .meter-row {
       display: grid;
       grid-template-columns: 130px minmax(160px, 1fr) 80px;
@@ -292,6 +322,7 @@
       .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary-grid { grid-template-columns: 1fr; }
       .meter-row { grid-template-columns: 100px minmax(100px, 1fr) 70px; gap: 10px; }
+      .live-stats-head { align-items: flex-start; flex-direction: column; }
     }
   </style>
 </head>
@@ -327,24 +358,42 @@
     </section>
 
     <section class="utilization" aria-labelledby="utilization-heading">
-      <h2 id="utilization-heading">Resource use during the five-minute soak</h2>
-      <p>The audio workload retained substantial processing and USB headroom.</p>
+      <div class="live-stats-head">
+        <div>
+          <h2 id="utilization-heading">Live Meerya utilization</h2>
+          <span class="live-stats-state" id="liveStatsState">Serial not connected</span>
+        </div>
+        <div class="live-stats-actions">
+          <button id="connectStatsBtn" type="button">Connect Serial</button>
+          <button id="disconnectStatsBtn" type="button" disabled>Disconnect</button>
+        </div>
+      </div>
       <div class="meter-row">
         <strong>CPU core 0</strong>
-        <span class="meter-track" aria-hidden="true"><span class="meter-fill" style="width: 33.6%"></span></span>
-        <span class="meter-value">33.6%</span>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill" id="cpu0Fill" style="width: 0"></span></span>
+        <span class="meter-value" id="cpu0Value">--</span>
       </div>
       <div class="meter-row">
         <strong>CPU core 1</strong>
-        <span class="meter-track" aria-hidden="true"><span class="meter-fill" style="width: 26.7%"></span></span>
-        <span class="meter-value">26.7%</span>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill" id="cpu1Fill" style="width: 0"></span></span>
+        <span class="meter-value" id="cpu1Value">--</span>
       </div>
       <div class="meter-row">
-        <strong>USB audio</strong>
-        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" style="width: 12.8%"></span></span>
-        <span class="meter-value">12.8%</span>
+        <strong>USB speaker</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" id="speakerFill" style="width: 0"></span></span>
+        <span class="meter-value" id="speakerValue">--</span>
       </div>
-      <p class="utilization-note">USB audio carried 768 kb/s in each direction, or 1.536 Mb/s combined. The percentage compares audio payload with the 12 Mb/s USB full-speed line rate and excludes framing and control overhead. CPU percentages are interval values calculated from the firmware runtime counters immediately before and after the soak.</p>
+      <div class="meter-row">
+        <strong>USB microphone</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" id="microphoneFill" style="width: 0"></span></span>
+        <span class="meter-value" id="microphoneValue">--</span>
+      </div>
+      <div class="meter-row">
+        <strong>USB combined</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" id="combinedFill" style="width: 0"></span></span>
+        <span class="meter-value" id="combinedValue">--</span>
+      </div>
+      <p class="utilization-note" id="liveStatsNote">Values come from a 500 ms firmware measurement over the selected Meerya CDC serial connection. USB percentages are audio payload against the 12 Mb/s full-speed line rate; protocol overhead is excluded.</p>
     </section>
 
     <section class="plain-summary">
@@ -963,5 +1012,121 @@ PS</code></pre>
       </div>
     </details>
   </main>
+  <script>
+    (() => {
+      const elements = {
+        connect: document.getElementById("connectStatsBtn"),
+        disconnect: document.getElementById("disconnectStatsBtn"),
+        state: document.getElementById("liveStatsState"),
+        note: document.getElementById("liveStatsNote"),
+      };
+      let port;
+      let reader;
+      let writer;
+      let readBuffer = "";
+      let pollTimer;
+
+      function setMeter(name, value, suffix = "%") {
+        const bounded = Math.max(0, Math.min(100, value));
+        document.getElementById(`${name}Fill`).style.width = `${bounded}%`;
+        document.getElementById(`${name}Value`).textContent = `${value.toFixed(name.startsWith("cpu") ? 1 : 2)}${suffix}`;
+      }
+
+      function handleLine(line) {
+        let match = line.match(/^live-stats: sample_ms=(\d+) streams=speaker:(\w+),microphone:(\w+)/);
+        if (match) {
+          elements.state.textContent = `Live · ${match[1]} ms sample · speaker ${match[2]} · microphone ${match[3]}`;
+          return;
+        }
+        match = line.match(/^cpu-utilization: core0=(\d+(?:\.\d+)?)% core1=(\d+(?:\.\d+)?)%/);
+        if (match) {
+          setMeter("cpu0", Number(match[1]));
+          setMeter("cpu1", Number(match[2]));
+          return;
+        }
+        match = line.match(/^usb-audio-bandwidth: speaker=(\d+)bps \((\d+(?:\.\d+)?)%\) microphone=(\d+)bps \((\d+(?:\.\d+)?)%\) combined=(\d+)bps \((\d+(?:\.\d+)?)%\)/);
+        if (match) {
+          setMeter("speaker", Number(match[2]));
+          setMeter("microphone", Number(match[4]));
+          setMeter("combined", Number(match[6]));
+          elements.note.textContent = `Live payload: speaker ${(Number(match[1]) / 1000).toFixed(1)} kb/s, microphone ${(Number(match[3]) / 1000).toFixed(1)} kb/s, combined ${(Number(match[5]) / 1000000).toFixed(3)} Mb/s. Percentages use the 12 Mb/s USB full-speed line rate and exclude protocol overhead.`;
+        }
+      }
+
+      async function readSerial() {
+        const decoder = new TextDecoder();
+        try {
+          while (port?.readable) {
+            reader = port.readable.getReader();
+            try {
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                readBuffer += decoder.decode(value, { stream: true });
+                const lines = readBuffer.split(/\r?\n/);
+                readBuffer = lines.pop() ?? "";
+                lines.forEach(handleLine);
+              }
+            } finally {
+              reader.releaseLock();
+              reader = undefined;
+            }
+          }
+        } catch (error) {
+          elements.state.textContent = `Serial error: ${error.message}`;
+        }
+      }
+
+      async function requestStats() {
+        if (!writer) return;
+        try {
+          await writer.write(new TextEncoder().encode("stats\r\n"));
+        } catch (error) {
+          elements.state.textContent = `Serial write failed: ${error.message}`;
+        }
+      }
+
+      async function disconnect(finalState = "Serial not connected") {
+        clearInterval(pollTimer);
+        pollTimer = undefined;
+        if (reader) await reader.cancel().catch(() => {});
+        if (writer) {
+          writer.releaseLock();
+          writer = undefined;
+        }
+        if (port) await port.close().catch(() => {});
+        port = undefined;
+        elements.connect.disabled = false;
+        elements.disconnect.disabled = true;
+        elements.state.textContent = finalState;
+      }
+
+      async function connect() {
+        if (!("serial" in navigator)) {
+          elements.state.textContent = "Web Serial requires Chrome or Edge";
+          return;
+        }
+        try {
+          port = await navigator.serial.requestPort();
+          await port.open({ baudRate: 115200 });
+          writer = port.writable.getWriter();
+          elements.connect.disabled = true;
+          elements.disconnect.disabled = false;
+          elements.state.textContent = "Connected · waiting for first sample";
+          void readSerial();
+          await requestStats();
+          pollTimer = setInterval(requestStats, 1200);
+        } catch (error) {
+          await disconnect(`Connection failed: ${error.message}`);
+        }
+      }
+
+      elements.connect.addEventListener("click", connect);
+      elements.disconnect.addEventListener("click", disconnect);
+      navigator.serial?.addEventListener("disconnect", (event) => {
+        if (event.target === port) void disconnect();
+      });
+    })();
+  </script>
 </body>
 </html>
