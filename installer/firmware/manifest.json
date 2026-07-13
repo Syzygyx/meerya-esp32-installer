@@ -1,7 +1,7 @@
 {
   "name": "Meerya ESP32 Firmware",
-  "generatedAt": "2026-07-11T00:02:09Z",
-  "gitHead": "1b1fdec1a678",
+  "generatedAt": "2026-07-13T16:50:02Z",
+  "gitHead": "7a2d45a6a17c",
   "defaultTarget": "waveshare-audio-board-uac1-audio",
   "targets": [
     {
@@ -45,7 +45,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "2ead9fadd015f8a1becfd6afd565a148e950136d88805d3c37fb70210994df79"
+          "sha256": "d2ae6a3edc8be53c099936ec785af6440a01d41f4b2ba89b50ab1b47b99de801"
         },
         {
           "address": 32768,
@@ -65,8 +65,8 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
-          "size": 1374144,
-          "sha256": "ca9b47e58a78288cb89775fe5ebe17366ac656827802de991ee073a1f7b0184c"
+          "size": 1374160,
+          "sha256": "ec6a16f64a6f693881700780d319a5126055c6b401c92bcbc7dc7ea000df9633"
         }
       ]
     }
