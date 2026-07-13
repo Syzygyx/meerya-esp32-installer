@@ -39,6 +39,32 @@
     li + li {
       margin-top: 10px;
     }
+
+    .report {
+      padding: 18px;
+      border: 1px solid #d7dde5;
+      border-radius: 8px;
+      list-style: none;
+    }
+
+    .report strong,
+    .report small {
+      display: block;
+    }
+
+    .report small {
+      margin-top: 6px;
+      opacity: 0.72;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-top: 12px;
+      color: #8a5100;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -46,9 +72,11 @@
     <h1>Weekly Status</h1>
     <p>Published Meerya ESP32 engineering status reports.</p>
     <ul>
-      <li>
-        <a href="status-2026-07-08/">2026-07-08: Windows duplex audio</a>
-        <span>(<a href="status-2026-07-08.md">Markdown</a>)</span>
+      <li class="report">
+        <strong><a href="status-2026-07-08/">Windows duplex audio: July 1-8, 2026</a></strong>
+        <small>Five-minute Windows audio proof, Chrome microphone results, web installer progress, and the remaining USB regression.</small>
+        <span class="badge">Working path proven; investigation active</span>
+        <small><a href="status-2026-07-08.md">Raw engineering report</a></small>
       </li>
     </ul>
   </main>

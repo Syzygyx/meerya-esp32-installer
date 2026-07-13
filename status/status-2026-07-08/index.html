@@ -13,6 +13,12 @@
       --panel: #ffffff;
       --border: #d7dde5;
       --accent: #0f766e;
+      --success: #137a43;
+      --success-bg: #eaf7ef;
+      --warning: #9a5b00;
+      --warning-bg: #fff5df;
+      --info: #285ea8;
+      --info-bg: #edf4ff;
       --code-bg: #eef2f6;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.55;
@@ -25,6 +31,12 @@
         --panel: #181d23;
         --border: #303946;
         --accent: #5eead4;
+        --success: #77d99a;
+        --success-bg: #163222;
+        --warning: #ffc96b;
+        --warning-bg: #372911;
+        --info: #9bc2ff;
+        --info-bg: #17283f;
         --code-bg: #222a33;
       }
     }
@@ -69,6 +81,159 @@
       font-size: 0.92rem;
     }
     main { padding-top: 32px; }
+    .report-date {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+    .status-banner {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      padding: 20px;
+      border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+      border-left: 5px solid var(--warning);
+      border-radius: 8px;
+      background: var(--warning-bg);
+    }
+    .status-banner h2 {
+      margin: 0 0 6px;
+      padding: 0;
+      border: 0;
+      font-size: 1.3rem;
+    }
+    .status-banner p { margin: 0; }
+    .status-label {
+      color: var(--warning);
+      font-size: 0.78rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin: 24px 0 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--border);
+    }
+    .metric {
+      min-width: 0;
+      padding: 18px;
+      background: var(--panel);
+    }
+    .metric strong {
+      display: block;
+      color: var(--text);
+      font-size: 1.55rem;
+      line-height: 1.15;
+    }
+    .metric span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .utilization {
+      margin-top: 24px;
+    }
+    .utilization h2 {
+      margin: 0 0 6px;
+      padding: 0;
+      border: 0;
+      font-size: 1.2rem;
+    }
+    .utilization > p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+    .meter-row {
+      display: grid;
+      grid-template-columns: 130px minmax(160px, 1fr) 80px;
+      gap: 14px;
+      align-items: center;
+      max-width: 760px;
+      margin-top: 12px;
+    }
+    .meter-track {
+      height: 12px;
+      overflow: hidden;
+      border-radius: 6px;
+      background: var(--code-bg);
+    }
+    .meter-fill {
+      display: block;
+      height: 100%;
+      background: var(--info);
+    }
+    .meter-fill.usb { background: var(--success); }
+    .meter-value {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    .utilization-note {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      margin-top: 26px;
+    }
+    .summary-panel {
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .summary-panel h2 {
+      margin: 0 0 12px;
+      padding: 0;
+      border: 0;
+      font-size: 1.2rem;
+    }
+    .summary-panel ul { margin: 0; padding-left: 1.2rem; }
+    .summary-panel li + li { margin-top: 9px; }
+    .summary-panel.success { border-top: 4px solid var(--success); }
+    .summary-panel.warning { border-top: 4px solid var(--warning); }
+    .summary-panel.info { border-top: 4px solid var(--info); }
+    .plain-summary {
+      margin: 28px 0;
+      padding: 20px;
+      border-left: 5px solid var(--info);
+      background: var(--info-bg);
+    }
+    .plain-summary h2 {
+      margin: 0 0 8px;
+      padding: 0;
+      border: 0;
+      font-size: 1.2rem;
+    }
+    .plain-summary p:last-child { margin-bottom: 0; }
+    .technical-record {
+      margin-top: 36px;
+      border-top: 1px solid var(--border);
+    }
+    .technical-record > summary {
+      padding: 22px 0;
+      color: var(--accent);
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .technical-record > summary span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 400;
+    }
+    .technical-record-body > h1 { display: none; }
     h2 {
       margin-top: 42px;
       padding-top: 24px;
@@ -123,6 +288,10 @@
     @media (max-width: 700px) {
       .header-inner, main { padding: 18px; }
       table { min-width: 640px; }
+      .status-banner { grid-template-columns: 1fr; gap: 12px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary-grid { grid-template-columns: 1fr; }
+      .meter-row { grid-template-columns: 100px minmax(100px, 1fr) 70px; gap: 10px; }
     }
   </style>
 </head>
@@ -131,6 +300,7 @@
     <div class="header-inner">
       <p class="eyebrow">Meerya ESP32 weekly status</p>
       <h1>Windows Duplex Audio</h1>
+      <p class="report-date">July 1-8, 2026</p>
       <nav>
         <a href="../../">Home</a>
         <a href="../">Weekly status index</a>
@@ -141,6 +311,89 @@
     </div>
   </header>
   <main>
+    <section class="status-banner" aria-labelledby="status-heading">
+      <div>
+        <h2 id="status-heading">Working path proven; later regression isolated</h2>
+        <p>Meerya completed a nearly five-minute Windows full-duplex test and passed Chrome microphone capture. A later firmware change introduced a USB setup crash that remained under investigation at the end of this reporting period.</p>
+      </div>
+      <span class="status-label">Investigation active</span>
+    </section>
+
+    <section class="metrics" aria-label="Key results">
+      <div class="metric"><strong>295 sec</strong><span>Microphone captured in the best duplex run</span></div>
+      <div class="metric"><strong>301 sec</strong><span>Speaker rendered in the best duplex run</span></div>
+      <div class="metric"><strong>0</strong><span>USB transport errors in that run</span></div>
+      <div class="metric"><strong>48 kHz</strong><span>Mono UAC1 audio in both directions</span></div>
+    </section>
+
+    <section class="utilization" aria-labelledby="utilization-heading">
+      <h2 id="utilization-heading">Resource use during the five-minute soak</h2>
+      <p>The audio workload retained substantial processing and USB headroom.</p>
+      <div class="meter-row">
+        <strong>CPU core 0</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill" style="width: 33.6%"></span></span>
+        <span class="meter-value">33.6%</span>
+      </div>
+      <div class="meter-row">
+        <strong>CPU core 1</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill" style="width: 26.7%"></span></span>
+        <span class="meter-value">26.7%</span>
+      </div>
+      <div class="meter-row">
+        <strong>USB audio</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" style="width: 12.8%"></span></span>
+        <span class="meter-value">12.8%</span>
+      </div>
+      <p class="utilization-note">USB audio carried 768 kb/s in each direction, or 1.536 Mb/s combined. The percentage compares audio payload with the 12 Mb/s USB full-speed line rate and excludes framing and control overhead. CPU percentages are interval values calculated from the firmware runtime counters immediately before and after the soak.</p>
+    </section>
+
+    <section class="plain-summary">
+      <h2>In plain language</h2>
+      <p>We demonstrated that the hardware and Windows audio design can sustain two-way sound. We also showed that Chrome can receive the Meerya microphone. The remaining problem was not general audio quality: a later firmware revision crashed while Windows was opening or closing the microphone stream. The team narrowed that crash to one USB interface transition and prepared a focused fix for the next test.</p>
+    </section>
+
+    <div class="summary-grid">
+      <section class="summary-panel success">
+        <h2>What worked</h2>
+        <ul>
+          <li>Windows recognized Meerya as a standard UAC1 speaker and microphone.</li>
+          <li>A native Windows full-duplex soak ran for nearly five minutes.</li>
+          <li>Chrome and WebRTC captured the Meerya microphone successfully.</li>
+          <li>The public web installer could build, publish, flash, and start audio tests.</li>
+        </ul>
+      </section>
+      <section class="summary-panel warning">
+        <h2>What remained open</h2>
+        <ul>
+          <li>A later build panicked during a Windows microphone interface transition.</li>
+          <li>Interactive Google Meet quality still required a repeatable end-to-end test.</li>
+          <li>Camera support remained disabled while audio reliability took priority.</li>
+          <li>The latest narrow USB fix had been pushed but not yet loaded and retested.</li>
+        </ul>
+      </section>
+      <section class="summary-panel info">
+        <h2>Decisions made</h2>
+        <ul>
+          <li>Use UAC1 at 48 kHz mono for the Windows compatibility profile.</li>
+          <li>Prioritize microphone reliability, then speaker quality, then video.</li>
+          <li>Keep host-specific USB profiles selectable through persistent settings.</li>
+          <li>Make the public web installer the customer delivery path.</li>
+        </ul>
+      </section>
+      <section class="summary-panel">
+        <h2>Next validation</h2>
+        <ul>
+          <li>Load the focused idle-interface fix.</li>
+          <li>Run microphone-only and speaker-only checks.</li>
+          <li>Repeat 10-second and five-minute Windows duplex tests.</li>
+          <li>Finish with Chrome and Google Meet speech tests.</li>
+        </ul>
+      </section>
+    </div>
+
+    <details class="technical-record">
+      <summary>Open the full engineering record<span>Timeline, commits, counters, evidence files, commands, and debugging detail</span></summary>
+      <div class="technical-record-body">
 <h1 id="meerya-windows-duplex-audio-thread-summary">Meerya Windows Duplex Audio Thread Summary</h1>
 <p>Date range: 2026-07-01 through 2026-07-08 Repo: <code>Syzygyx/meerya-esp32</code> Primary objective: make Meerya work as a reliable full-duplex USB speakerphone on Windows, especially Windows 10/11 browser and native audio paths.</p>
 <h2 id="executive-summary">Executive Summary</h2>
@@ -707,6 +960,8 @@ PS</code></pre>
 </ul>
 <h2 id="bottom-line">Bottom Line</h2>
 <p>We proved that Meerya can do long-running native Windows duplex at least once on the UAC1 48 kHz mono profile, and we built substantial test infrastructure around that. We also proved Chrome/WebRTC microphone capture can work. The current blocking technical issue is a later-regression Windows native duplex panic around UAC1 microphone <code>SET_INTERFACE alt 0</code>, before audio stream counters advance. The latest pushed patch, <code>a5ba54e</code>, is the next thing to OTA and test because it removes a suspicious TinyUSB FIFO clear from that exact idle-alt path.</p>
+      </div>
+    </details>
   </main>
 </body>
 </html>
