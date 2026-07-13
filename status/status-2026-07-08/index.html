@@ -163,7 +163,17 @@
     }
     .live-stats-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
+    }
+    .live-stats-actions input {
+      min-width: 250px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      background: var(--panel);
+      font: inherit;
     }
     .live-stats-actions button {
       padding: 8px 12px;
@@ -361,11 +371,14 @@
       <div class="live-stats-head">
         <div>
           <h2 id="utilization-heading">Live Meerya utilization</h2>
-          <span class="live-stats-state" id="liveStatsState">Serial not connected</span>
+          <span class="live-stats-state" id="liveStatsState">WiFi not connected</span>
         </div>
         <div class="live-stats-actions">
-          <button id="connectStatsBtn" type="button">Connect Serial</button>
-          <button id="disconnectStatsBtn" type="button" disabled>Disconnect</button>
+          <input id="wifiStatsUrl" type="url" value="http://meerya.local/api/status" aria-label="Meerya status URL">
+          <button id="connectWifiStatsBtn" type="button">Connect WiFi</button>
+          <button id="disconnectWifiStatsBtn" type="button" disabled>Stop</button>
+          <button id="connectStatsBtn" type="button">Serial Fallback</button>
+          <button id="disconnectStatsBtn" type="button" disabled>Disconnect Serial</button>
         </div>
       </div>
       <div class="meter-row">
@@ -389,11 +402,16 @@
         <span class="meter-value" id="microphoneValue">--</span>
       </div>
       <div class="meter-row">
-        <strong>USB combined</strong>
+        <strong>USB video</strong>
+        <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" id="videoFill" style="width: 0"></span></span>
+        <span class="meter-value" id="videoValue">--</span>
+      </div>
+      <div class="meter-row">
+        <strong>USB total</strong>
         <span class="meter-track" aria-hidden="true"><span class="meter-fill usb" id="combinedFill" style="width: 0"></span></span>
         <span class="meter-value" id="combinedValue">--</span>
       </div>
-      <p class="utilization-note" id="liveStatsNote">Values come from a 500 ms firmware measurement over the selected Meerya CDC serial connection. USB percentages are audio payload against the 12 Mb/s full-speed line rate; protocol overhead is excluded.</p>
+      <p class="utilization-note" id="liveStatsNote">Values come from consecutive Meerya status snapshots. USB percentages are audio payload against the 12 Mb/s full-speed line rate; protocol overhead is excluded.</p>
     </section>
 
     <section class="plain-summary">
@@ -1017,6 +1035,9 @@ PS</code></pre>
       const elements = {
         connect: document.getElementById("connectStatsBtn"),
         disconnect: document.getElementById("disconnectStatsBtn"),
+        connectWifi: document.getElementById("connectWifiStatsBtn"),
+        disconnectWifi: document.getElementById("disconnectWifiStatsBtn"),
+        wifiUrl: document.getElementById("wifiStatsUrl"),
         state: document.getElementById("liveStatsState"),
         note: document.getElementById("liveStatsNote"),
       };
@@ -1025,6 +1046,10 @@ PS</code></pre>
       let writer;
       let readBuffer = "";
       let pollTimer;
+      let wifiTimer;
+      let previousWifiStatus;
+      let wifiPollBusy = false;
+      let wifiActive = false;
 
       function setMeter(name, value, suffix = "%") {
         const bounded = Math.max(0, Math.min(100, value));
@@ -1051,6 +1076,87 @@ PS</code></pre>
           setMeter("combined", Number(match[6]));
           elements.note.textContent = `Live payload: speaker ${(Number(match[1]) / 1000).toFixed(1)} kb/s, microphone ${(Number(match[3]) / 1000).toFixed(1)} kb/s, combined ${(Number(match[5]) / 1000000).toFixed(3)} Mb/s. Percentages use the 12 Mb/s USB full-speed line rate and exclude protocol overhead.`;
         }
+      }
+
+      function statusSnapshot(status) {
+        const runtime = status?.runtime;
+        const audio = status?.audio_runtime;
+        const cores = runtime?.cpu?.cores;
+        if (!runtime || !audio || !Array.isArray(cores) || cores.length < 2) {
+          throw new Error("status response is missing CPU or audio counters");
+        }
+        return {
+          uptimeMs: Number(runtime.uptime_ms),
+          idle: [Number(cores[0].idle_runtime_counter), Number(cores[1].idle_runtime_counter)],
+          speakerBytes: Number(audio.speaker_usb_bytes),
+          microphoneBytes: Number(audio.microphone_usb_bytes),
+          videoBytes: Number(audio.video_bytes_completed ?? 0),
+          speakerActive: Boolean(audio.speaker_stream_active),
+          microphoneActive: Boolean(audio.microphone_stream_active),
+          videoActive: Boolean(audio.video_stream_active),
+        };
+      }
+
+      function applyWifiDelta(before, after) {
+        const elapsedMs = after.uptimeMs - before.uptimeMs;
+        if (!(elapsedMs > 0)) return;
+        const elapsedUs = elapsedMs * 1000;
+        for (let core = 0; core < 2; core++) {
+          const idleDelta = after.idle[core] - before.idle[core];
+          const used = 100 * (1 - Math.max(0, Math.min(elapsedUs, idleDelta)) / elapsedUs);
+          setMeter(`cpu${core}`, used);
+        }
+        const speakerBps = Math.max(0, after.speakerBytes - before.speakerBytes) * 8000 / elapsedMs;
+        const microphoneBps = Math.max(0, after.microphoneBytes - before.microphoneBytes) * 8000 / elapsedMs;
+        const videoBps = Math.max(0, after.videoBytes - before.videoBytes) * 8000 / elapsedMs;
+        const combinedBps = speakerBps + microphoneBps + videoBps;
+        setMeter("speaker", speakerBps * 100 / 12000000);
+        setMeter("microphone", microphoneBps * 100 / 12000000);
+        setMeter("video", videoBps * 100 / 12000000);
+        setMeter("combined", combinedBps * 100 / 12000000);
+        elements.state.textContent = `Live over WiFi · ${elapsedMs} ms sample · speaker ${after.speakerActive ? "active" : "idle"} · microphone ${after.microphoneActive ? "active" : "idle"} · video ${after.videoActive ? "active" : "idle"}`;
+        elements.note.textContent = `Live payload: speaker ${(speakerBps / 1000).toFixed(1)} kb/s, microphone ${(microphoneBps / 1000).toFixed(1)} kb/s, video ${(videoBps / 1000000).toFixed(3)} Mb/s, total ${(combinedBps / 1000000).toFixed(3)} Mb/s. Percentages use the 12 Mb/s USB full-speed line rate and exclude protocol overhead.`;
+      }
+
+      async function pollWifiStats() {
+        if (!wifiActive || wifiPollBusy) return;
+        wifiPollBusy = true;
+        try {
+          const response = await fetch(elements.wifiUrl.value.trim(), {
+            cache: "no-store",
+            targetAddressSpace: "local",
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const current = statusSnapshot(await response.json());
+          if (!wifiActive) return;
+          if (previousWifiStatus) applyWifiDelta(previousWifiStatus, current);
+          else elements.state.textContent = "WiFi connected · collecting first interval";
+          previousWifiStatus = current;
+        } catch (error) {
+          if (wifiActive) elements.state.textContent = `WiFi status unavailable: ${error.message}`;
+        } finally {
+          wifiPollBusy = false;
+        }
+      }
+
+      async function connectWifi() {
+        clearInterval(wifiTimer);
+        previousWifiStatus = undefined;
+        wifiActive = true;
+        elements.connectWifi.disabled = true;
+        elements.disconnectWifi.disabled = false;
+        await pollWifiStats();
+        if (wifiActive) wifiTimer = setInterval(pollWifiStats, 1000);
+      }
+
+      function disconnectWifi() {
+        clearInterval(wifiTimer);
+        wifiTimer = undefined;
+        wifiActive = false;
+        previousWifiStatus = undefined;
+        elements.connectWifi.disabled = false;
+        elements.disconnectWifi.disabled = true;
+        elements.state.textContent = "WiFi not connected";
       }
 
       async function readSerial() {
@@ -1123,6 +1229,8 @@ PS</code></pre>
 
       elements.connect.addEventListener("click", connect);
       elements.disconnect.addEventListener("click", disconnect);
+      elements.connectWifi.addEventListener("click", connectWifi);
+      elements.disconnectWifi.addEventListener("click", disconnectWifi);
       navigator.serial?.addEventListener("disconnect", (event) => {
         if (event.target === port) void disconnect();
       });
