@@ -9,8 +9,8 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-07-26T12:25:53Z",
-  "gitHead": "493484c8bd9f",
+  "generatedAt": "2026-07-26T12:52:56Z",
+  "gitHead": "c3967198d9f9",
   "defaultTarget": "waveshare-audio-board-uac1-audio",
   "targets": [
     {
@@ -56,7 +56,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21136,
-          "sha256": "c470160c88b8f0510e69c2d90342cc983fbe2c9a3d04fc7e5de0787bb495185f"
+          "sha256": "828ee9d55b14fe66b4c1407f53291753f75c333cd0b41aaf47ab57801a71bd8f"
         },
         {
           "address": 32768,
@@ -77,7 +77,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
           "size": 1380144,
-          "sha256": "48b754680097df3b1dd29b1ab2e3fc40cfeaadb7ffdfee80d1d648c3318fe484"
+          "sha256": "dcf67c8778176a08ed7663d10af4637b510f49a5e4d7a1f51ffa2aa246b3bd8c"
         }
       ]
     }
