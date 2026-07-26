@@ -653,6 +653,11 @@
           <div><strong>Status:</strong> <code id="targetStatus">Loading</code></div>
           <div><strong>Audio contract:</strong> <code id="audioContract">Loading</code></div>
         </div>
+        <div class="note">
+          <strong>Development image:</strong> This browser installer does not provision
+          production Secure Boot, flash encryption, or per-device encrypted NVS.
+          Customer units must use the signed manufacturing package.
+        </div>
 
         <div class="file-list" id="fileList"></div>
 
@@ -771,7 +776,7 @@
         <h2>Before Flashing</h2>
         <p><strong>Browser:</strong> Chrome or Edge on a secure page. Safari does not expose Web Serial.</p>
         <p><strong>Board mode:</strong> put the ESP32-S3 into ROM bootloader mode so it appears as the USB Serial/JTAG device, not as the Meerya UAC device.</p>
-        <p><strong>Build:</strong> the current bundled image is the Waveshare ESP32-S3 Audio Board UAC1 48 kHz mono Windows WASAPI duplex firmware.</p>
+        <p><strong>Build:</strong> the bundled image is development firmware for the Waveshare ESP32-S3 Audio Board UAC1 48 kHz mono Windows WASAPI duplex profile. It is not a production security image.</p>
       </aside>
     </div>
 
