@@ -9,8 +9,8 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-07-26T16:03:55Z",
-  "gitHead": "39cfbcacffcc",
+  "generatedAt": "2026-07-28T21:10:22Z",
+  "gitHead": "bc5ff1bdbc97",
   "defaultTarget": "waveshare-audio-board-uac1-audio",
   "targets": [
     {
@@ -21,7 +21,7 @@
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer lab firmware. This image is not a production security package. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 5 ms batches (480 bytes), AEC available, runtime default disabled, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
+      "description": "Current CI-built Waveshare ESP32-S3 Audio Board browser-installer lab firmware. This image is not a production security package. USB product \"Meerya UAC1 48k Mono Mic\", VID 0x303A/PID 0x8022, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 5 ms batches (480 bytes), AEC not compiled, macOS feedback profile enabled. Camera disabled; CDC serial disabled; HID control disabled.",
       "status": "development-lab-current-main",
       "quickTest": {
         "statusUrls": [
@@ -56,7 +56,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21136,
-          "sha256": "4017cde7de71297dfc4fe034880a40043d5573aae9fb637ef3bba0b690abe0d5"
+          "sha256": "4edda0707027ef319701e7679533187615d0874a7578f833ad1b1c089fb2ca31"
         },
         {
           "address": 32768,
@@ -76,8 +76,8 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
-          "size": 1380304,
-          "sha256": "18fcf8250899fe3c91a6b1a497f830ec9e7179d4660791f73b269beeeaf56ea6"
+          "size": 1376864,
+          "sha256": "dced17d498d76d1f7c1e9b1b403bf3635689bf379f7a144e416c9c228b69da78"
         }
       ]
     }
