@@ -120,6 +120,34 @@
       letter-spacing: 0;
     }
 
+    .installer-steps {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .installer-step {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .installer-step b {
+      color: var(--ink);
+      font-size: 0.95rem;
+    }
+
+    .installer-step span {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
     label {
       display: block;
       margin-bottom: 8px;
@@ -568,9 +596,72 @@
       color: var(--ink);
     }
 
+    .bootloader-guide {
+      display: grid;
+      gap: 12px;
+    }
+
+    .bootloader-steps {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .bootloader-steps strong {
+      color: var(--ink);
+    }
+
+    .board-reference {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+    }
+
+    .board-reference img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+
+    .board-reference figcaption {
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .board-reference a {
+      color: var(--accent);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
     .native-panel {
       display: none;
       margin-top: 16px;
+    }
+
+    details.advanced-panel {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 0;
+    }
+
+    details.advanced-panel summary {
+      cursor: pointer;
+      padding: 14px 18px;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    details.advanced-panel > .advanced-panel-body {
+      padding: 0 18px 18px;
     }
 
     .native-panel[data-available="true"] {
@@ -614,6 +705,7 @@
       header,
       .layout,
       .controls,
+      .installer-steps,
       .audio-test-grid,
       .audio-test-actions,
       .audio-test-columns,
@@ -633,7 +725,7 @@
     <header>
       <div>
         <h1>Meerya Firmware Installer</h1>
-        <p>Flash the ESP32-S3 audio board from Chrome or Edge using Web Serial.</p>
+        <p>Put the board in bootloader mode, connect, flash, and wait for Meerya audio to come back.</p>
       </div>
       <div class="status" id="status" data-state="idle">
         <span class="status-dot"></span>
@@ -641,34 +733,35 @@
       </div>
     </header>
 
+    <div class="installer-steps">
+      <div class="installer-step">
+        <b>1. Bootloader</b>
+        <span>Hold the second small button in the Waveshare side button group, then plug in USB.</span>
+      </div>
+      <div class="installer-step">
+        <b>2. Connect</b>
+        <span>Choose ESP32-S3 USB JTAG/serial or USB Serial when Chrome asks.</span>
+      </div>
+      <div class="installer-step">
+        <b>3. Flash</b>
+        <span>Click Flash and keep the cable connected until progress reaches 100%.</span>
+      </div>
+      <div class="installer-step">
+        <b>4. Done</b>
+        <span>The page resets the board and checks that Meerya audio returns.</span>
+      </div>
+    </div>
+
     <div class="layout">
       <section>
-        <h2>Firmware</h2>
-        <label for="targetSelect">Target build</label>
-        <select id="targetSelect"></select>
-
-        <div class="build-identity" id="buildIdentity">
-          <div><strong>Firmware commit:</strong> <code id="firmwareCommit">Loading</code></div>
-          <div><strong>Generated:</strong> <code id="manifestGenerated">Loading</code></div>
-          <div><strong>Status:</strong> <code id="targetStatus">Loading</code></div>
-          <div><strong>Audio contract:</strong> <code id="audioContract">Loading</code></div>
-        </div>
+        <h2>Flash Meerya</h2>
         <div class="note">
-          <strong>Development image:</strong> This browser installer does not provision
-          production Secure Boot, flash encryption, or per-device encrypted NVS.
-          Customer units must use the signed manufacturing package.
-        </div>
-
-        <div class="file-list" id="fileList"></div>
-
-        <div class="option-row">
-          <input id="eraseAll" type="checkbox">
-          <label for="eraseAll" style="margin:0;font-weight:500">Erase flash before writing</label>
+          <p><strong>Ready:</strong> use this page after the Waveshare board is in bootloader mode. If the browser device picker shows Meerya audio instead of ESP32-S3 USB Serial/JTAG, repeat step 1.</p>
         </div>
 
         <div class="controls">
-          <button id="connectBtn">Connect</button>
-          <button id="flashBtn" class="primary" disabled>Flash</button>
+          <button id="connectBtn">1. Connect</button>
+          <button id="flashBtn" class="primary" disabled>2. Flash and Restart</button>
           <button id="disconnectBtn" disabled>Disconnect</button>
         </div>
 
@@ -688,6 +781,34 @@
           <ul class="quick-test-results" id="quickTestResults"></ul>
           <div class="quick-test-links" id="quickTestLinks"></div>
         </div>
+
+        <details class="advanced-panel">
+          <summary>Firmware Details</summary>
+          <div class="advanced-panel-body">
+            <label for="targetSelect">Target build</label>
+            <select id="targetSelect"></select>
+
+            <div class="build-identity" id="buildIdentity">
+              <div><strong>Firmware commit:</strong> <code id="firmwareCommit">Loading</code></div>
+              <div><strong>Generated:</strong> <code id="manifestGenerated">Loading</code></div>
+              <div><strong>Status:</strong> <code id="targetStatus">Loading</code></div>
+              <div><strong>Audio contract:</strong> <code id="audioContract">Loading</code></div>
+            </div>
+
+            <div class="file-list" id="fileList"></div>
+
+            <div class="option-row">
+              <input id="eraseAll" type="checkbox">
+              <label for="eraseAll" style="margin:0;font-weight:500">Erase flash before writing</label>
+            </div>
+
+            <div class="note" style="margin-top:14px">
+              <strong>Development image:</strong> This browser installer does not provision
+              production Secure Boot, flash encryption, or per-device encrypted NVS.
+              Customer units must use the signed manufacturing package.
+            </div>
+          </div>
+        </details>
 
         <div class="wifi-setup" id="wifiSetupPanel" data-visible="false">
           <div class="quick-test-head">
@@ -775,7 +896,29 @@
       <aside class="note">
         <h2>Before Flashing</h2>
         <p><strong>Browser:</strong> Chrome or Edge on a secure page. Safari does not expose Web Serial.</p>
-        <p><strong>Board mode:</strong> put the ESP32-S3 into ROM bootloader mode so it appears as the USB Serial/JTAG device, not as the Meerya UAC device.</p>
+        <div class="bootloader-guide">
+          <p><strong>Bootloader mode:</strong> the board must appear as the ESP32-S3 USB Serial/JTAG device, not as the Meerya audio device.</p>
+          <ol class="bootloader-steps">
+            <li>Unplug USB from the Waveshare board.</li>
+            <li>Find the side button group marked by item <strong>4</strong> in the Waveshare reference image.</li>
+            <li>Press and hold the <strong>second small button</strong> in that group: <strong>BOOT</strong>. It is next to <strong>RESET</strong>.</li>
+            <li>While still holding <strong>BOOT</strong>, plug USB back in.</li>
+            <li>Keep holding <strong>BOOT</strong> for about 2 seconds, then release it.</li>
+            <li>Click <strong>Connect</strong> and select <strong>ESP32-S3 USB JTAG/serial</strong> or <strong>USB Serial</strong>.</li>
+          </ol>
+          <figure class="board-reference">
+            <img
+              src="https://docs.waveshare.com/assets/images/ESP32-S3-AUDIO-Board-details-intro-b85598a5d92aa52b773d6565b09ee360.webp"
+              alt="Waveshare ESP32-S3-AUDIO-Board onboard resources, with item 4 pointing to the RESET, BOOT, and user button group"
+              loading="lazy"
+              width="960"
+              height="739">
+            <figcaption>
+              Waveshare labels item 4 as the button group containing RESET, BOOT, and user buttons.
+              <a href="https://docs.waveshare.com/ESP32-S3-AUDIO-Board" target="_blank" rel="noopener">Open Waveshare reference</a>
+            </figcaption>
+          </figure>
+        </div>
         <p><strong>Build:</strong> the bundled image is development firmware for the Waveshare ESP32-S3 Audio Board UAC1 48 kHz mono Windows WASAPI duplex profile. It is not a production security image.</p>
       </aside>
     </div>
@@ -2542,6 +2685,24 @@
       els.quickTestState.textContent = els.quickTestPanel.dataset.state === "pass" ? "Passed" : "Manual check";
     }
 
+    async function resetBoardIntoApp() {
+      appendLog("Clearing ESP32-S3 force-download boot bit...\n");
+      try {
+        await state.loader.writeReg(0x6000812c, 0, 0x1, 0);
+      } catch (error) {
+        appendLog(`Could not clear force-download bit from browser: ${error.message}\n`);
+      }
+
+      try {
+        appendLog("Starting app with soft reset...\n");
+        await state.loader.after("soft_reset");
+      } catch (error) {
+        appendLog(`Soft reset did not complete: ${error.message}\n`);
+        appendLog("Trying USB hard reset fallback...\n");
+        await state.loader.after("hard_reset");
+      }
+    }
+
     async function flash() {
       if (!state.connected || !state.loader) {
         throw new Error("Connect to the board before flashing.");
@@ -2567,7 +2728,7 @@
       });
 
       appendLog("Flash complete. Resetting board...\n");
-      await state.loader.after("hard_reset");
+      await resetBoardIntoApp();
       setStatus("Testing", "ready");
       setProgress(100, "Firmware installed. Running post-flash test...");
       await runPostFlashTest(state.target);
