@@ -173,6 +173,24 @@
       margin-top: 16px;
     }
 
+    .bootloader-actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+
+    .bootloader-actions button {
+      width: 100%;
+    }
+
+    .bootloader-actions p {
+      font-size: 0.9rem;
+    }
+
     button {
       min-height: 42px;
       border: 1px solid var(--line);
@@ -705,6 +723,7 @@
       header,
       .layout,
       .controls,
+      .bootloader-actions,
       .installer-steps,
       .audio-test-grid,
       .audio-test-actions,
@@ -736,7 +755,7 @@
     <div class="installer-steps">
       <div class="installer-step">
         <b>1. Bootloader</b>
-        <span>Hold the second small button in the Waveshare side button group, then plug in USB.</span>
+        <span>If Meerya is running, use Bluetooth Bootloader. Otherwise hold the second small Waveshare side button while plugging in USB.</span>
       </div>
       <div class="installer-step">
         <b>2. Connect</b>
@@ -756,7 +775,12 @@
       <section>
         <h2>Flash Meerya</h2>
         <div class="note">
-          <p><strong>Ready:</strong> use this page after the Waveshare board is in bootloader mode. If the browser device picker shows Meerya audio instead of ESP32-S3 USB Serial/JTAG, repeat step 1.</p>
+          <p><strong>Ready:</strong> if Meerya is already running, use Bluetooth Bootloader first. Then connect over Web Serial. If the browser picker shows Meerya audio instead of ESP32-S3 USB Serial/JTAG, repeat step 1.</p>
+        </div>
+
+        <div class="bootloader-actions">
+          <button id="bleBootloaderBtn" type="button">Use Bluetooth Bootloader</button>
+          <p>Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions.</p>
         </div>
 
         <div class="controls">
@@ -1036,6 +1060,7 @@
       terminal: document.getElementById("terminal"),
       nativePanel: document.getElementById("nativePanel"),
       nativeBridgeState: document.getElementById("nativeBridgeState"),
+      bleBootloaderBtn: document.getElementById("bleBootloaderBtn"),
       nativeBluetooth: document.getElementById("nativeBluetooth"),
       nativeAccessory: document.getElementById("nativeAccessory"),
       nativeDiscovered: document.getElementById("nativeDiscovered"),
@@ -1059,6 +1084,10 @@
       },
     };
 
+    const BLE_CONTROL_SERVICE_UUID = "c5a00001-8f3b-4b79-8f2e-6f45d1b55d10";
+    const BLE_COMMAND_UUID = "c5a00001-8f3b-4b79-8f2e-6f45d1b55d11";
+    const BLE_RESPONSE_UUID = "c5a00001-8f3b-4b79-8f2e-6f45d1b55d12";
+
     function appendLog(message) {
       els.terminal.textContent += message;
       els.terminal.scrollTop = els.terminal.scrollHeight;
@@ -1075,6 +1104,7 @@
     }
 
     function updateFlashControls() {
+      els.bleBootloaderBtn.disabled = state.connected;
       if (state.meeryaAudioReady) {
         els.connectBtn.disabled = true;
         els.flashBtn.disabled = true;
@@ -2418,6 +2448,82 @@
       renderTarget(defaultTarget);
     }
 
+    async function readBleText(characteristic) {
+      const value = await characteristic.readValue();
+      return new TextDecoder().decode(value).replace(/\0+$/g, "");
+    }
+
+    async function writeBleCommandAndWait(commandCharacteristic, responseCharacteristic, command, {
+      timeoutMs = 5000,
+      acceptPrefix = "accepted=",
+    } = {}) {
+      const previous = await readBleText(responseCharacteristic).catch(() => "");
+      await commandCharacteristic.writeValueWithResponse(new TextEncoder().encode(command));
+
+      const deadline = performance.now() + timeoutMs;
+      let latest = previous;
+      while (performance.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        latest = await readBleText(responseCharacteristic);
+        if (latest !== previous || latest.startsWith(acceptPrefix)) {
+          return latest;
+        }
+      }
+      throw new Error(`No BLE response to ${command}`);
+    }
+
+    async function enterBootloaderViaBle() {
+      if (!("bluetooth" in navigator)) {
+        throw new Error("This browser does not support Web Bluetooth. Use Chrome or Edge, or use the physical BOOT button.");
+      }
+      if (!window.isSecureContext) {
+        throw new Error("Web Bluetooth requires HTTPS. Open the published GitHub Pages loader, not a local file.");
+      }
+
+      els.bleBootloaderBtn.disabled = true;
+      setStatus("Bluetooth");
+      setProgress(0, "Choose Meerya Control in the Bluetooth picker.");
+      appendLog("Requesting Meerya BLE control service...\n");
+
+      let device;
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [
+            { services: [BLE_CONTROL_SERVICE_UUID] },
+            { name: "Meerya Control" },
+          ],
+          optionalServices: [BLE_CONTROL_SERVICE_UUID],
+        });
+        appendLog(`Bluetooth device selected: ${device.name || device.id}\n`);
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(BLE_CONTROL_SERVICE_UUID);
+        const commandCharacteristic = await service.getCharacteristic(BLE_COMMAND_UUID);
+        const responseCharacteristic = await service.getCharacteristic(BLE_RESPONSE_UUID);
+
+        setProgress(0, "Sending Bluetooth bootloader command...");
+        appendLog("Sending BLE command: bootloader\n");
+        const response = await writeBleCommandAndWait(
+          commandCharacteristic,
+          responseCharacteristic,
+          "bootloader",
+          { timeoutMs: 7000 },
+        );
+        appendLog(`BLE response: ${response}\n`);
+        if (!response.startsWith("accepted=bootloader")) {
+          throw new Error(`Bootloader command was not accepted: ${response}`);
+        }
+        setStatus("Bootloader requested", "ready");
+        setProgress(0, "Meerya is rebooting. Wait a few seconds, then click 1. Connect and choose ESP32-S3 USB Serial/JTAG.");
+        state.meeryaAudioReady = false;
+        updateFlashControls();
+      } finally {
+        if (device?.gatt?.connected) {
+          device.gatt.disconnect();
+        }
+        els.bleBootloaderBtn.disabled = false;
+      }
+    }
+
     async function connect() {
       if (!("serial" in navigator)) {
         throw new Error("This browser does not support Web Serial. Use Chrome or Edge.");
@@ -2785,6 +2891,7 @@
       const target = state.manifest.targets.find((item) => item.id === els.targetSelect.value);
       renderTarget(target);
     });
+    els.bleBootloaderBtn.addEventListener("click", () => enterBootloaderViaBle().catch(handleError));
     els.connectBtn.addEventListener("click", () => connect().catch(handleError));
     els.flashBtn.addEventListener("click", () => flash().catch(handleError));
     els.disconnectBtn.addEventListener("click", () => disconnect().catch(handleError));
