@@ -794,6 +794,21 @@
           <p id="progressText">Waiting for a board.</p>
         </div>
 
+        <section class="quick-test" id="nrfDfuPanel" data-state="idle" style="margin-top:20px">
+          <div class="quick-test-head">
+            <strong>Qorvo NI / nRF52833 DFU</strong>
+            <span id="nrfDfuState">Not connected</span>
+          </div>
+          <p>Use this only with a signed Nordic DFU ZIP for the DWM3001C/nRF52833. It uses Web Bluetooth Secure DFU and does not use the ESP32 flasher above.</p>
+          <div class="controls">
+            <input id="nrfDfuFile" type="file" accept=".zip,application/zip">
+            <button id="nrfDfuConnectBtn">Select nRF DFU device</button>
+            <button id="nrfDfuFlashBtn" class="primary" disabled>Flash nRF package</button>
+          </div>
+          <progress id="nrfDfuProgress" value="0" max="100" style="width:100%;margin-top:12px"></progress>
+          <p id="nrfDfuProgressText">Choose a Nordic DFU ZIP, then select the device in DFU mode.</p>
+        </section>
+
         <div class="quick-test" id="quickTestPanel" data-state="idle">
           <div class="quick-test-head">
             <strong>Post-Flash Test</strong>
@@ -993,6 +1008,11 @@
     </section>
   </main>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crc-32/1.0.2/crc32.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://unpkg.com/web-bluetooth-dfu@1.2.1/dist/secure-dfu.js"></script>
+  <script src="https://unpkg.com/web-bluetooth-dfu@1.2.1/examples/package.js"></script>
+
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
 
@@ -1008,6 +1028,9 @@
       audioAutoRunInProgress: false,
       audioRecordingUrls: [],
       lastFirmwareStatusPayload: null,
+      nrfPackage: null,
+      nrfDevice: null,
+      nrfDfu: null,
     };
 
     const els = {
@@ -1025,6 +1048,13 @@
       eraseAll: document.getElementById("eraseAll"),
       progress: document.getElementById("progress"),
       progressText: document.getElementById("progressText"),
+      nrfDfuPanel: document.getElementById("nrfDfuPanel"),
+      nrfDfuState: document.getElementById("nrfDfuState"),
+      nrfDfuFile: document.getElementById("nrfDfuFile"),
+      nrfDfuConnectBtn: document.getElementById("nrfDfuConnectBtn"),
+      nrfDfuFlashBtn: document.getElementById("nrfDfuFlashBtn"),
+      nrfDfuProgress: document.getElementById("nrfDfuProgress"),
+      nrfDfuProgressText: document.getElementById("nrfDfuProgressText"),
       quickTestPanel: document.getElementById("quickTestPanel"),
       quickTestState: document.getElementById("quickTestState"),
       copyStatusBtn: document.getElementById("copyStatusBtn"),
@@ -2550,6 +2580,63 @@
       setProgress(0, "Ready to flash.");
     }
 
+    function setNrfDfuProgress(percent, message) {
+      els.nrfDfuProgress.value = percent;
+      els.nrfDfuProgressText.textContent = message;
+    }
+
+    async function loadNrfDfuPackage(file) {
+      if (!file) return;
+      if (!window.SecureDfuPackage || !window.SecureDfu) {
+        throw new Error("The Nordic DFU browser module could not be loaded.");
+      }
+      state.nrfPackage = new window.SecureDfuPackage(file);
+      await state.nrfPackage.load();
+      els.nrfDfuState.textContent = `Package ready: ${file.name}`;
+      els.nrfDfuFlashBtn.disabled = !state.nrfDevice;
+      setNrfDfuProgress(0, "Package verified. Select an nRF device in DFU mode.");
+    }
+
+    async function connectNrfDfu() {
+      if (!("bluetooth" in navigator)) {
+        throw new Error("Web Bluetooth is unavailable. Use Chrome or Edge on HTTPS.");
+      }
+      if (!window.SecureDfu) throw new Error("The Nordic DFU browser module could not be loaded.");
+      els.nrfDfuConnectBtn.disabled = true;
+      els.nrfDfuState.textContent = "Selecting nRF DFU device...";
+      const dfu = new window.SecureDfu(window.CRC32.buf);
+      dfu.addEventListener("log", event => appendLog(`nRF DFU: ${event.message}\n`));
+      dfu.addEventListener("progress", event => {
+        const percent = event.totalBytes ? Math.round(event.currentBytes / event.totalBytes * 100) : 0;
+        setNrfDfuProgress(percent, `nRF ${event.object || "firmware"}: ${percent}%`);
+      });
+      state.nrfDfu = dfu;
+      state.nrfDevice = await dfu.requestDevice(true);
+      if (!state.nrfDevice) throw new Error("No nRF DFU device selected.");
+      await dfu.connect(state.nrfDevice);
+      els.nrfDfuState.textContent = `Connected: ${state.nrfDevice.name || "nRF DFU device"}`;
+      els.nrfDfuFlashBtn.disabled = !state.nrfPackage;
+      setNrfDfuProgress(0, state.nrfPackage ? "Ready to flash the signed nRF package." : "Choose a Nordic DFU ZIP.");
+    }
+
+    async function flashNrfDfu() {
+      if (!state.nrfDfu || !state.nrfDevice) throw new Error("Select an nRF DFU device first.");
+      if (!state.nrfPackage) throw new Error("Choose a signed Nordic DFU ZIP first.");
+      els.nrfDfuFlashBtn.disabled = true;
+      els.nrfDfuConnectBtn.disabled = true;
+      els.nrfDfuState.textContent = "Flashing nRF package...";
+      const update = async image => {
+        if (!image) return;
+        appendLog(`nRF DFU: updating ${image.type} (${image.imageFile})\n`);
+        await state.nrfDfu.update(state.nrfDevice, image.initData, image.imageData);
+      };
+      await update(await state.nrfPackage.getBaseImage());
+      await update(await state.nrfPackage.getAppImage());
+      els.nrfDfuState.textContent = "nRF package installed";
+      setNrfDfuProgress(100, "nRF DFU complete. The device should reboot into NI firmware.");
+      els.nrfDfuConnectBtn.disabled = false;
+    }
+
     async function loadFirmwareFiles(target) {
       const files = [];
       for (const file of target.files) {
@@ -2895,6 +2982,16 @@
     els.connectBtn.addEventListener("click", () => connect().catch(handleError));
     els.flashBtn.addEventListener("click", () => flash().catch(handleError));
     els.disconnectBtn.addEventListener("click", () => disconnect().catch(handleError));
+    els.nrfDfuFile.addEventListener("change", event => loadNrfDfuPackage(event.target.files[0]).catch(handleError));
+    els.nrfDfuConnectBtn.addEventListener("click", () => connectNrfDfu().catch(error => {
+      els.nrfDfuConnectBtn.disabled = false;
+      handleError(error);
+    }));
+    els.nrfDfuFlashBtn.addEventListener("click", () => flashNrfDfu().catch(error => {
+      els.nrfDfuFlashBtn.disabled = false;
+      els.nrfDfuConnectBtn.disabled = false;
+      handleError(error);
+    }));
     els.copyStatusBtn.addEventListener("click", () => copyLatestFirmwareStatus().catch(handleError));
     els.audioRefreshBtn.addEventListener("click", () => refreshAudioDevices().catch(handleError));
     els.audioHostToMeeryaBtn.addEventListener("click", () => runAudioPathTest({
