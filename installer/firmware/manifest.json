@@ -9,9 +9,9 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-10-07T17:13:52Z",
-  "gitHead": "ea231d36f92b",
-  "defaultTarget": "waveshare-audio-board-uac1-audio",
+  "generatedAt": "2026-10-11T15:33:06Z",
+  "gitHead": "local-revc-debug",
+  "defaultTarget": "meerya-revc-uac",
   "targets": [
     {
       "id": "waveshare-audio-board-uac1-audio",
@@ -56,7 +56,7 @@
           "path": "firmware/waveshare-audio-board-uac1-audio/bootloader.bin",
           "label": "Bootloader",
           "size": 21136,
-          "sha256": "79836c4ba484427b8430832b29b8b450091cb75190b80b606e991741466ee96a"
+          "sha256": "18a63a1f9a3a4a89fdb2a009225e07f449851a9ea9ff0cb719efb947b6122824"
         },
         {
           "address": 32768,
@@ -76,8 +76,77 @@
           "address": 131072,
           "path": "firmware/waveshare-audio-board-uac1-audio/meerya_esp32.bin",
           "label": "Application",
-          "size": 1582288,
-          "sha256": "c6db0e633fe1c4152c613085d8f72b558ef4aab6a21ef091662cdd4bb00bb3d0"
+          "size": 1586768,
+          "sha256": "565c70d3c31e6087fe8f23b0e25c23b30a28bbb9e37e4aae929c244d4b13110a"
+        }
+      ]
+    },
+    {
+      "id": "meerya-revc-uac",
+      "name": "Meerya Rev.C - UAC Full-Duplex Audio",
+      "chip": "esp32s3",
+      "baudRate": 460800,
+      "flashMode": "dio",
+      "flashFreq": "80m",
+      "flashSize": "16MB",
+      "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya Rev.C UAC\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC not compiled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled.",
+      "status": "development-lab-local-debug",
+      "bleBootloaderSupported": false,
+      "quickTest": {
+        "statusUrls": [
+          "http://meerya-revc.local/api/status",
+          "http://meerya-revc.lan/api/status",
+          "http://192.168.4.1/api/status"
+        ],
+        "appUrls": [
+          "http://meerya-revc.local/app",
+          "http://meerya-revc.lan/app",
+          "http://192.168.4.1/app"
+        ],
+        "cameraPath": "/camera.jpg",
+        "cameraExpected": false,
+        "audioExpected": {
+          "aecEnabled": false,
+          "microphone": {
+            "sampleRateHz": 48000,
+            "channels": 1,
+            "intervalMs": 1,
+            "resolutionBits": 16,
+            "packetBytes": 96,
+            "packetHz": 1000,
+            "serviceIntervalMs": 10,
+            "serviceBatchBytes": 960
+          }
+        }
+      },
+      "files": [
+        {
+          "address": 0,
+          "path": "firmware/meerya-revc-uac/bootloader.bin",
+          "label": "Bootloader",
+          "size": 21056,
+          "sha256": "dec91018f9c0fff178555de8714c728cc6ef8e42bb057d7fdd410ff4ad510822"
+        },
+        {
+          "address": 32768,
+          "path": "firmware/meerya-revc-uac/partition-table.bin",
+          "label": "Partition table",
+          "size": 3072,
+          "sha256": "7ff0f7ec1df44946a4e2c4610c0a853f5fbf1d73f9985c07b2a49d3fe523c860"
+        },
+        {
+          "address": 57344,
+          "path": "firmware/meerya-revc-uac/ota_data_initial.bin",
+          "label": "OTA data",
+          "size": 8192,
+          "sha256": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f"
+        },
+        {
+          "address": 131072,
+          "path": "firmware/meerya-revc-uac/meerya_esp32.bin",
+          "label": "Application",
+          "size": 1371728,
+          "sha256": "2bc367cda6e4d6e121730e482313ebfcafbbd4433625b4b14ae0be37ddbdf29d"
         }
       ]
     }

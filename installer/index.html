@@ -631,31 +631,25 @@
       color: var(--ink);
     }
 
-    .board-reference {
-      display: grid;
-      gap: 8px;
-      margin: 0;
-    }
-
-    .board-reference img {
-      display: block;
-      width: 100%;
-      height: auto;
+    .boot-schematic {
+      margin: 14px 0 0;
+      padding: 12px;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: var(--bg);
     }
 
-    .board-reference figcaption {
-      color: var(--muted);
-      font-size: 0.85rem;
-      line-height: 1.4;
+    .boot-schematic svg {
+      display: block;
+      width: 100%;
+      height: auto;
     }
 
-    .board-reference a {
-      color: var(--accent);
-      font-weight: 700;
-      text-decoration: none;
+    .boot-schematic figcaption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.4;
     }
 
     .native-panel {
@@ -755,7 +749,7 @@
     <div class="installer-steps">
       <div class="installer-step">
         <b>1. Bootloader</b>
-        <span>If Meerya is running, use Bluetooth Bootloader. Otherwise hold the second small Waveshare side button while plugging in USB.</span>
+        <span>Use Bluetooth Bootloader when available. For manual entry, hold BOOT low while pulsing EN low; release EN, then BOOT.</span>
       </div>
       <div class="installer-step">
         <b>2. Connect</b>
@@ -780,7 +774,8 @@
 
         <div class="bootloader-actions">
           <button id="bleBootloaderBtn" type="button">Use Bluetooth Bootloader</button>
-          <p>Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions.</p>
+          <p id="bleBootloaderHelp">Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions.</p>
+          <p id="physicalBootHelp" class="muted">Physical entry: hold BOOT low, pulse EN low, release EN while continuing to hold BOOT, then release BOOT after the ROM bootloader starts.</p>
         </div>
 
         <div class="controls">
@@ -921,29 +916,50 @@
         <h2>Before Flashing</h2>
         <p><strong>Browser:</strong> Chrome or Edge on a secure page. Safari does not expose Web Serial.</p>
         <div class="bootloader-guide">
-          <p><strong>Bootloader mode:</strong> the board must appear as the ESP32-S3 USB Serial/JTAG device, not as the Meerya audio device.</p>
+          <p><strong>Bootloader mode:</strong> hold BOOT low, pull EN low, release EN while keeping BOOT low, then release BOOT after ROM download mode starts. BOOT must be low when EN rises. The board should appear as the ESP32-S3 USB Serial/JTAG device, not as the Meerya audio device.</p>
           <ol class="bootloader-steps">
-            <li>Unplug USB from the Waveshare board.</li>
-            <li>Find the side button group marked by item <strong>4</strong> in the Waveshare reference image.</li>
-            <li>Press and hold the <strong>second small button</strong> in that group: <strong>BOOT</strong>. It is next to <strong>RESET</strong>.</li>
-            <li>While still holding <strong>BOOT</strong>, plug USB back in.</li>
-            <li>Keep holding <strong>BOOT</strong> for about 2 seconds, then release it.</li>
+            <li>Locate the board's <strong>BOOT</strong> and <strong>EN</strong> (reset) controls.</li>
+            <li>Hold <strong>BOOT</strong> low, pull <strong>EN</strong> low briefly, then release <strong>EN</strong> while keeping BOOT low.</li>
+            <li>Wait for the ROM bootloader to start, then release <strong>BOOT</strong>.</li>
             <li>Click <strong>Connect</strong> and select <strong>ESP32-S3 USB JTAG/serial</strong> or <strong>USB Serial</strong>.</li>
           </ol>
-          <figure class="board-reference">
-            <img
-              src="https://docs.waveshare.com/assets/images/ESP32-S3-AUDIO-Board-details-intro-b85598a5d92aa52b773d6565b09ee360.webp"
-              alt="Waveshare ESP32-S3-AUDIO-Board onboard resources, with item 4 pointing to the RESET, BOOT, and user button group"
-              loading="lazy"
-              width="960"
-              height="739">
-            <figcaption>
-              Waveshare labels item 4 as the button group containing RESET, BOOT, and user buttons.
-              <a href="https://docs.waveshare.com/ESP32-S3-AUDIO-Board" target="_blank" rel="noopener">Open Waveshare reference</a>
-            </figcaption>
+          <figure class="boot-schematic">
+            <svg viewBox="0 0 680 300" role="img" aria-labelledby="bootSchematicTitle bootSchematicDesc" xmlns="http://www.w3.org/2000/svg">
+              <title id="bootSchematicTitle">ESP32-S3 BOOT and EN download-mode schematic</title>
+              <desc id="bootSchematicDesc">BOOT GPIO0 and EN each have a pull-up to 3.3 volts and a momentary switch to ground. Hold BOOT low while pulsing EN low; release EN first, then BOOT.</desc>
+              <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="440" y="62" width="210" height="174" rx="8" />
+                <path d="M440 108H320M440 190H320" />
+                <path d="M320 108V84M320 190V166" />
+                <path d="M320 84H190M320 166H190" />
+                <path d="M320 84V45M320 166V127" />
+                <path d="M320 45H410M320 127H410" />
+                <path d="M190 84V115M190 166V197" />
+                <path d="M190 115L178 123L202 135L178 147L202 159L190 166" />
+                <path d="M190 197L178 205L202 217L178 229L202 241L190 248" />
+                <path d="M190 124V135M190 135L154 153M154 153V163M190 207V218M190 218L154 236M154 236V246" />
+                <path d="M154 163V170M144 170H164M147 177H161M150 184H158M154 246V253M144 253H164M147 260H161M150 267H158" />
+                <path d="M410 45V53M398 53L410 62L422 53M410 127V135M398 135L410 144L422 135" />
+                <path d="M410 62V72M410 144V154" />
+              </g>
+              <g fill="currentColor" font-family="system-ui, sans-serif">
+                <text x="449" y="91" font-size="19" font-weight="700">ESP32-S3</text>
+                <text x="458" y="119" font-size="17">GPIO0 / BOOT</text>
+                <text x="458" y="198" font-size="17">EN / RESET</text>
+                <text x="39" y="89" font-size="15">BOOT momentary</text>
+                <text x="39" y="171" font-size="15">EN momentary</text>
+                <text x="343" y="31" font-size="15">3V3</text>
+                <text x="343" y="113" font-size="15">3V3</text>
+                <text x="133" y="296" font-size="16" font-weight="700">GND</text>
+                <text x="279" y="74" font-size="13">10 kΩ</text>
+                <text x="279" y="156" font-size="13">10 kΩ</text>
+                <text x="20" y="26" font-size="15" font-weight="700">ROM DOWNLOAD MODE</text>
+              </g>
+            </svg>
+            <figcaption>BOOT is GPIO0 and EN is active-low reset. Keep BOOT asserted low as EN rises so GPIO0 is sampled low; then release BOOT.</figcaption>
           </figure>
         </div>
-        <p><strong>Build:</strong> the bundled image is development firmware for the Waveshare ESP32-S3 Audio Board UAC1 48 kHz mono Windows WASAPI duplex profile. It is not a production security image.</p>
+          <p><strong>Selected build:</strong> <span id="installerTargetSummary">Loading target details.</span> All browser-installer images are development firmware, not production security packages.</p>
       </aside>
     </div>
 
@@ -1022,6 +1038,9 @@
       connectBtn: document.getElementById("connectBtn"),
       flashBtn: document.getElementById("flashBtn"),
       disconnectBtn: document.getElementById("disconnectBtn"),
+      bleBootloaderHelp: document.getElementById("bleBootloaderHelp"),
+      physicalBootHelp: document.getElementById("physicalBootHelp"),
+      installerTargetSummary: document.getElementById("installerTargetSummary"),
       eraseAll: document.getElementById("eraseAll"),
       progress: document.getElementById("progress"),
       progressText: document.getElementById("progressText"),
@@ -2389,8 +2408,9 @@
       if (status.microphone_channels !== mic.channels) {
         failures.push(`mic ch ${status.microphone_channels ?? "?"}`);
       }
+      const expectedRuntimeIntervalMs = Number(mic.serviceIntervalMs ?? mic.intervalMs);
       const runtimeIntervalMs = Math.round(Number(status.audio_runtime?.microphone_task_service_interval_us ?? 0) / 1000);
-      if (Number.isFinite(runtimeIntervalMs) && runtimeIntervalMs > 0 && runtimeIntervalMs !== mic.intervalMs) {
+      if (Number.isFinite(runtimeIntervalMs) && runtimeIntervalMs > 0 && runtimeIntervalMs !== expectedRuntimeIntervalMs) {
         failures.push(`mic interval ${runtimeIntervalMs} ms`);
       }
       const actualAec = Boolean(status.audio_settings?.aec_enabled);
@@ -2405,6 +2425,15 @@
 
     function renderTarget(target) {
       state.target = target;
+      const bleBootloaderSupported = target.bleBootloaderSupported !== false;
+      els.bleBootloaderBtn.hidden = !bleBootloaderSupported;
+      els.bleBootloaderHelp.textContent = bleBootloaderSupported
+        ? "Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions."
+        : "Bluetooth bootloader is not included in this target. Use the physical BOOT and EN controls to enter ESP32-S3 ROM download mode.";
+      els.physicalBootHelp.textContent = target.id === "meerya-revc-uac"
+        ? "Rev.C J6 sequence: hold BOOT low, pull EN low, release EN while keeping BOOT low, wait for the ROM bootloader to start, then release BOOT. EN is the active-low reset input; BOOT must be low when EN rises."
+        : "Physical entry: hold BOOT low, pulse EN low, release EN while continuing to hold BOOT, then release BOOT after the ROM bootloader starts.";
+      els.installerTargetSummary.textContent = `${target.name}. ${target.description || ""}`;
       els.firmwareCommit.textContent = state.manifest?.gitHead || "unknown";
       els.manifestGenerated.textContent = state.manifest?.generatedAt || "unknown";
       els.targetStatus.textContent = target.status || "unknown";
