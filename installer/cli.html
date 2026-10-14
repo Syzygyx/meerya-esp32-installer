@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>Meerya Rev.C CLI Flasher</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101820; --panel:#18242e; --line:#31414d; --text:#eef4f7; --muted:#b7c4cc; --accent:#86d7c5; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { width:min(920px,calc(100% - 32px)); margin:36px auto 64px; }
+    header,.panel { padding:24px; border:1px solid var(--line); border-radius:16px; background:var(--panel); }
+    header { margin-bottom:18px; }
+    h1,h2 { line-height:1.2; }
+    h1 { margin:0 0 8px; font-size:clamp(1.8rem,5vw,2.7rem); }
+    h2 { margin:0 0 12px; font-size:1.28rem; }
+    p { margin:8px 0 14px; }
+    .muted { color:var(--muted); }
+    .nav { display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; }
+    a { color:var(--accent); }
+    section { margin-top:18px; }
+    .callout { padding:12px 14px; border-left:3px solid var(--accent); background:#1d3036; border-radius:6px; }
+    pre { overflow-x:auto; margin:10px 0 18px; padding:16px; border:1px solid var(--line); border-radius:10px; background:#0b1116; color:#eef4f7; font:0.9rem/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    ol { padding-left:22px; }
+    li { margin:8px 0; }
+    @media(max-width:600px) { main { width:min(100% - 20px,920px); margin-top:10px; } header,.panel { padding:18px; } pre { font-size:.8rem; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Meerya Rev.C command line flasher</h1>
+      <p class="muted">Clone the installer repository, verify the published firmware bundle, flash it with esptool, then reboot the ESP32-S3 out of ROM download mode.</p>
+      <nav class="nav" aria-label="Installer pages">
+        <a href="./">Browser installer</a>
+        <a href="https://github.com/Syzygyx/meerya-esp32-installer">Installer repository</a>
+        <a href="https://github.com/Syzygyx/meerya-esp32">Firmware source</a>
+      </nav>
+    </header>
+
+    <section class="panel">
+      <h2>1. Clone the installer and prepare esptool</h2>
+      <p>Python 3 and Git are required. esptool 4.9 or newer provides the ESP32-S3 watchdog reset used below.</p>
+      <pre><code>git clone https://github.com/Syzygyx/meerya-esp32-installer.git
+cd meerya-esp32-installer/installer
+python3 -m venv .venv
+# macOS / Linux
+source .venv/bin/activate
+python -m pip install --upgrade pip "esptool&gt;=4.9"
+python -m esptool version</code></pre>
+      <p>On Windows PowerShell, activate the environment with <code>.\.venv\Scripts\Activate.ps1</code> instead of the <code>source</code> command.</p>
+      <pre><code># Windows PowerShell, from meerya-esp32-installer\installer
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip "esptool&gt;=4.9"
+python -m esptool version</code></pre>
+    </section>
+
+    <section class="panel">
+      <h2>2. Enter ROM download mode</h2>
+      <ol>
+        <li>Connect the Meerya Rev.C over USB and locate its ESP32-S3 serial port.</li>
+        <li>Hold BOOT low, pull EN low, release EN while keeping BOOT low, wait for the ROM USB serial device to appear, then release BOOT.</li>
+        <li>List available ports and set <code>PORT</code> to the ROM port.</li>
+      </ol>
+      <pre><code># macOS
+ls /dev/cu.usbmodem*
+export PORT=/dev/cu.usbmodem1101
+
+# Linux
+ls /dev/ttyACM* /dev/ttyUSB*
+export PORT=/dev/ttyACM0
+
+# Windows PowerShell: replace COM7 with the port shown in Device Manager
+$env:PORT = "COM7"</code></pre>
+      <p class="callout"><strong>First install:</strong> use the physical BOOT and EN sequence. BLE can request bootloader mode only when the currently running firmware already has BLE control.</p>
+    </section>
+
+    <section class="panel">
+      <h2>3. Verify and flash the Rev.C bundle</h2>
+      <p>Run these commands from <code>meerya-esp32-installer/installer</code>. The checksums ensure the downloaded images match the installer manifest before writing flash.</p>
+      <pre><code>python -c "import hashlib,json,pathlib; r=pathlib.Path('.'); m=json.loads((r/'firmware/manifest.json').read_text()); t=next(x for x in m['targets'] if x['id']=='meerya-revc-uac'); assert all(len((p:=r/f['path']).read_bytes())==f['size'] and hashlib.sha256(p).hexdigest()==f['sha256'] for f in t['files']); print('Bundle verified:',t['name'])"
+
+python -m esptool --chip esp32s3 --port "$PORT" \
+  --before no-reset --after no-reset write-flash \
+  --flash-mode dio --flash-freq 80m --flash-size 16MB \
+  0x0 firmware/meerya-revc-uac/bootloader.bin \
+  0x8000 firmware/meerya-revc-uac/partition-table.bin \
+  0xe000 firmware/meerya-revc-uac/ota_data_initial.bin \
+  0x20000 firmware/meerya-revc-uac/meerya_esp32.bin</code></pre>
+      <p>For Windows PowerShell, use <code>$env:PORT</code> and run the multiline command with backticks:</p>
+      <pre><code>python -m esptool --chip esp32s3 --port $env:PORT `
+  --before no-reset --after no-reset write-flash `
+  --flash-mode dio --flash-freq 80m --flash-size 16MB `
+  0x0 firmware/meerya-revc-uac/bootloader.bin `
+  0x8000 firmware/meerya-revc-uac/partition-table.bin `
+  0xe000 firmware/meerya-revc-uac/ota_data_initial.bin `
+  0x20000 firmware/meerya-revc-uac/meerya_esp32.bin
+
+python -m esptool --chip esp32s3 --port $env:PORT `
+  --before no-reset --after no-reset write-mem 0x6000812c 0 0x1
+python -m esptool --chip esp32s3 --port $env:PORT `
+  --before no-reset --after watchdog-reset run</code></pre>
+    </section>
+
+    <section class="panel">
+      <h2>4. Start the app with watchdog reset</h2>
+      <p>ESP32-S3 USB Serial/JTAG may remain in ROM after a regular USB reset because it does not resample the BOOT strap. Clear the force-download bit, then use esptool's watchdog reset to reboot into the flashed app.</p>
+      <pre><code>python -m esptool --chip esp32s3 --port "$PORT" \
+  --before no-reset --after no-reset write-mem 0x6000812c 0 0x1
+
+python -m esptool --chip esp32s3 --port "$PORT" \
+  --before no-reset --after watchdog-reset run</code></pre>
+      <p>After the USB device reconnects, confirm that the app interface enumerates. The Rev.C target uses USB VID <code>0x303A</code> and PID <code>0x8007</code>. If it still appears as ROM USB Serial/JTAG, check that BOOT is released and pulse EN once.</p>
+      <p class="muted">This page flashes the development-lab Rev.C bundle published with the installer. It is not the signed production provisioning workflow.</p>
+    </section>
+  </main>
+</body>
+</html>

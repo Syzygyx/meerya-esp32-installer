@@ -745,11 +745,12 @@
         <span id="statusText">Idle</span>
       </div>
     </header>
+    <p><a href="./cli.html">Command line flashing instructions</a></p>
 
     <div class="installer-steps">
       <div class="installer-step">
         <b>1. Bootloader</b>
-        <span>Use Bluetooth Bootloader when available. For manual entry, hold BOOT low while pulsing EN low; release EN, then BOOT.</span>
+        <span>For first install, enter ROM with BOOT and EN. Bluetooth works only when the firmware already running on Meerya includes BLE control.</span>
       </div>
       <div class="installer-step">
         <b>2. Connect</b>
@@ -769,7 +770,7 @@
       <section>
         <h2>Flash Meerya</h2>
         <div class="note">
-          <p><strong>Ready:</strong> if Meerya is already running, use Bluetooth Bootloader first. Then connect over Web Serial. If the browser picker shows Meerya audio instead of ESP32-S3 USB Serial/JTAG, repeat step 1.</p>
+          <p><strong>Initial install:</strong> use the Rev.C J6 BOOT/EN sequence below; BLE cannot start bootloader mode on a blank device or firmware without BLE control. For later updates from a BLE-enabled build, use Bluetooth Bootloader, then connect over Web Serial.</p>
         </div>
 
         <div class="bootloader-actions">
@@ -2428,7 +2429,7 @@
       const bleBootloaderSupported = target.bleBootloaderSupported !== false;
       els.bleBootloaderBtn.hidden = !bleBootloaderSupported;
       els.bleBootloaderHelp.textContent = bleBootloaderSupported
-        ? "Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions."
+        ? "For repeat updates, Chrome/Edge can ask a BLE-enabled Meerya app to reboot into the ESP32-S3 bootloader. This cannot enable BLE on a first install; use BOOT and EN for initial entry."
         : "Bluetooth bootloader is not included in this target. Use the physical BOOT and EN controls to enter ESP32-S3 ROM download mode.";
       els.physicalBootHelp.textContent = target.id === "meerya-revc-uac"
         ? "Rev.C J6 sequence: hold BOOT low, pull EN low, release EN while keeping BOOT low, wait for the ROM bootloader to start, then release BOOT. EN is the active-low reset input; BOOT must be low when EN rises."
@@ -2829,12 +2830,17 @@
       }
 
       try {
-        appendLog("Starting app with soft reset...\n");
-        await state.loader.after("soft_reset");
+        appendLog("Starting app with ESP32-S3 watchdog reset...\n");
+        // Match esptool's ESP32-S3 watchdog-reset sequence. USB Serial/JTAG
+        // hard/soft resets may keep GPIO0 latched in ROM download mode.
+        await state.loader.writeReg(0x600080b0, 0x50d83aa1);
+        await state.loader.writeReg(0x6000809c, 2000);
+        await state.loader.writeReg(0x60008098, 0xd0000102);
+        await state.loader.writeReg(0x600080b0, 0);
+        await delay(600);
       } catch (error) {
-        appendLog(`Soft reset did not complete: ${error.message}\n`);
-        appendLog("Trying USB hard reset fallback...\n");
-        await state.loader.after("hard_reset");
+        appendLog(`Watchdog reset did not complete: ${error.message}\n`);
+        throw error;
       }
     }
 
