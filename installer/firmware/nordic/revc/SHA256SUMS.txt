@@ -1,0 +1,5 @@
+f955ea2ac169c6abbcb774719e6e0d890632c0c318890dbd53b4a8544fb6923e  revc-apple-ni-swd-bootstrap.hex
+4f99de07c2446958b0f6325a94b2bee1970c6a6a7f7768d48b74edf1ef56e419  revc-apple-ni-dfu-v1.zip
+0b4ade82946f8f9566d0749ce9c791b1e0c940e73e75972db550aeb7bbee1c27  revc-apple-ni-application.hex
+5dce406bfcb4dcae47beca4f92246a6002c77b60c6b97b0bbf7f9a13dbc281d1  revc-secure-dfu-bootloader.hex
+82839f8f050f933f1ea3f20a09d12012e9d6ed6c580551ccb6da04da70299335  revc-bootloader-settings.hex

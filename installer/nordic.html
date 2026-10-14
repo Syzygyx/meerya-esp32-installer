@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>Meerya Rev.C Nordic DFU</title>
+  <style>
+    :root { color-scheme:dark; --bg:#101820; --panel:#18242e; --line:#31414d; --text:#eef4f7; --muted:#b7c4cc; --accent:#86d7c5; --warn:#ffd28a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { width:min(920px,calc(100% - 32px)); margin:36px auto 64px; }
+    header,.panel { padding:24px; border:1px solid var(--line); border-radius:16px; background:var(--panel); margin-bottom:18px; }
+    h1,h2 { line-height:1.2; } h1 { margin:0 0 8px; font-size:clamp(1.8rem,5vw,2.7rem); } h2 { margin:0 0 12px; font-size:1.28rem; }
+    p { margin:8px 0 14px; } .muted { color:var(--muted); } .warn { color:var(--warn); }
+    .nav { display:flex; gap:16px; flex-wrap:wrap; } a { color:var(--accent); }
+    .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:18px; }
+    .fact { border:1px solid var(--line); border-radius:10px; padding:12px; } .fact strong { display:block; }
+    button { border:0; border-radius:10px; padding:11px 16px; background:var(--accent); color:#10201f; font:inherit; font-weight:700; cursor:pointer; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    input[type=file] { display:block; margin:12px 0; max-width:100%; }
+    pre { overflow:auto; border-radius:10px; padding:16px; background:#0b1116; white-space:pre-wrap; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    progress { width:100%; height:16px; accent-color:var(--accent); }
+    #log { min-height:96px; max-height:300px; overflow:auto; white-space:pre-wrap; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    @media(max-width:600px) { main { width:min(100% - 20px,920px); margin-top:10px; } header,.panel { padding:18px; } }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Meerya Rev.C Nordic DFU</h1>
+      <p class="muted">Apple Nearby Interaction firmware path for the onboard Qorvo DWM3001C module. This is separate from the ESP32-S3 audio installer.</p>
+      <nav class="nav" aria-label="Installer pages">
+        <a href="./">ESP32 installer</a>
+        <a href="./cli.html">ESP32 command-line instructions</a>
+        <a href="https://github.com/Syzygyx/meerya-esp32-installer">Installer repository</a>
+      </nav>
+      <div class="facts">
+        <div class="fact"><strong>Board target</strong>DWM3001CTR13 / nRF52833 + DW3110</div>
+        <div class="fact"><strong>SWD bootstrap</strong>J5, TC2030-IDC, plus an SWD probe</div>
+        <div class="fact"><strong>Wireless update</strong>Nordic Secure DFU over BLE</div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>Rev.C development firmware</h2>
+      <p class="warn"><strong>Build complete; Rev.C hardware validation is still required.</strong> These downloads use the Qorvo DWM3001C module QANI target with Nordic Secure DFU enabled. They have not yet been flashed or smoke-tested on Rev.C hardware. The stock DWM3001CDK reference HEX is not used by this installer.</p>
+      <p><a href="./firmware/nordic/revc/revc-apple-ni-swd-bootstrap.hex" download>Download first-time SWD bootstrap HEX</a> · <a href="./firmware/nordic/revc/revc-apple-ni-dfu-v1.zip" download>Download signed BLE DFU package</a></p>
+      <p class="muted"><a href="./firmware/nordic/revc/SHA256SUMS.txt">SHA-256 checksums</a> · <a href="./firmware/nordic/revc/README.md">Firmware layout, licensing, and validation details</a></p>
+      <p class="muted">Install the bootstrap once through J5 with a TC2030-IDC cable and compatible SWD probe. Later application updates use this page over BLE. The DFU package is signed with a development key; keep a secure backup of that private key or future signed BLE updates cannot be made.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Install a signed Nordic DFU package over BLE</h2>
+      <p>Use the <a href="./firmware/nordic/revc/revc-apple-ni-dfu-v1.zip">Rev.C Apple NI v1 signed package</a> or another Nordic Secure DFU ZIP containing an application image and its signed init packet. The bootloader validates the signature and hardware compatibility before writing. The device must already be running the matching Nordic Secure DFU bootloader and advertising its DFU service.</p>
+      <label for="package"><strong>Signed firmware package (.zip)</strong></label>
+      <input id="package" type="file" accept=".zip,application/zip">
+      <p id="packageInfo" class="muted">Choose a signed application package to inspect it locally.</p>
+      <button id="connect" type="button" disabled>Connect to Nordic DFU</button>
+      <progress id="progress" value="0" max="100" aria-label="DFU progress"></progress>
+      <pre id="log" aria-live="polite">Ready. Firmware files are read in this browser and sent directly over BLE.</pre>
+    </section>
+
+    <section class="panel">
+      <h2>First-time SWD bootstrap</h2>
+      <ol>
+        <li>Use the board’s J5 six-pin TC2030 footprint with a TC2030-IDC cable and a 3.3 V compatible SWD probe.</li>
+        <li>J5 is routed to the Nordic module: pin 1 is +3.3 V, pin 2 SWDIO, pin 3 UWB_nRESET, pin 4 SWCLK, pin 5 GND, and pin 6 is not connected. Confirm the cable orientation against the Rev.C schematic before powering the probe.</li>
+        <li><a href="./firmware/nordic/revc/revc-apple-ni-swd-bootstrap.hex" download>Download the combined first-time Rev.C bootstrap HEX</a>. Install it with Nordic <code>nrfutil device program</code> or SEGGER J-Link. It programs the Nordic module only; it does not flash the ESP32-S3.</li>
+      </ol>
+      <p>Install the current Nordic command-line tool and its device command using the <a href="https://docs.nordicsemi.com/r/bundle/nrfutil/page/guides/installing.html/installing-nrf-util-from-the-web-default">official nRF Util installation guide</a>, then run:</p>
+      <pre><code># Install Nordic CLI tooling, then list connected debug probes
+nrfutil install device
+nrfutil device list
+
+# Set this path to the downloaded combined bootstrap HEX. Its HEX records
+# omit FDS, UWB calibration, MBR parameter, and backup-settings pages.
+nrfutil device program \
+  --firmware revc-apple-ni-swd-bootstrap.hex \
+  --serial-number &lt;J-Link-serial-number&gt; \
+  --options chip_erase_mode=ERASE_RANGES_TOUCHED_BY_FIRMWARE,verify=VERIFY_READ,reset=RESET_PIN</code></pre>
+      <p class="muted">This lab bootstrap uses range erase and its HEX contains no records for FDS at <code>0x63000–0x64FFF</code>, UWB calibration at <code>0x7B000–0x7CFFF</code>, MBR parameters at <code>0x7E000</code>, or the settings backup page. It writes bootloader settings at <code>0x7F000</code>. Confirm the physical probe target and cable orientation before programming.</p>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const SERVICE = "0000fe59-0000-1000-8000-00805f9b34fb";
+      const CONTROL = "8ec90001-f315-4f60-9fb8-838830daea50";
+      const PACKET = "8ec90002-f315-4f60-9fb8-838830daea50";
+      const BUTTONLESS = "8ec90003-f315-4f60-9fb8-838830daea50";
+      const els = {
+        file: document.getElementById("package"), info: document.getElementById("packageInfo"),
+        connect: document.getElementById("connect"), progress: document.getElementById("progress"),
+        log: document.getElementById("log"),
+      };
+      let packageFiles = null;
+      let pendingResponse = null;
+      let control = null;
+      let packet = null;
+      let busy = false;
+
+      function log(message) {
+        els.log.textContent += `${message}\n`;
+        els.log.scrollTop = els.log.scrollHeight;
+      }
+
+      function little32(value) {
+        const out = new Uint8Array(4);
+        new DataView(out.buffer).setUint32(0, value, true);
+        return out;
+      }
+
+      function read32(data, offset) {
+        return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true);
+      }
+
+      function crc32(bytes) {
+        let crc = 0xffffffff;
+        for (const byte of bytes) {
+          crc ^= byte;
+          for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+        }
+        return (crc ^ 0xffffffff) >>> 0;
+      }
+
+      function onControlNotification(event) {
+        if (!pendingResponse) return;
+        const response = new Uint8Array(event.target.value.buffer.slice(
+          event.target.value.byteOffset,
+          event.target.value.byteOffset + event.target.value.byteLength,
+        ));
+        pendingResponse(response);
+      }
+
+      function responseFor(opcode) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            if (pendingResponse === finish) pendingResponse = null;
+            reject(new Error(`Timed out waiting for Nordic DFU response to opcode 0x${opcode.toString(16)}`));
+          }, 15000);
+          const finish = (bytes) => {
+            clearTimeout(timer);
+            pendingResponse = null;
+            if (bytes[0] !== 0x60 || bytes[1] !== opcode) {
+              reject(new Error(`Unexpected Nordic DFU response: ${Array.from(bytes).map((v) => v.toString(16).padStart(2,"0")).join(" ")}`));
+              return;
+            }
+            if (bytes[2] !== 0x01) {
+              reject(new Error(`Nordic bootloader rejected opcode 0x${opcode.toString(16)} (result 0x${bytes[2].toString(16)})`));
+              return;
+            }
+            resolve(bytes);
+          };
+          pendingResponse = finish;
+        });
+      }
+
+      function buttonlessResponse(characteristic) {
+        return new Promise((resolve, reject) => {
+          const onValue = (event) => {
+            const view = event.target.value;
+            const bytes = new Uint8Array(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength));
+            characteristic.removeEventListener("characteristicvaluechanged", onValue);
+            clearTimeout(timer);
+            if (bytes[0] !== 0x20 || bytes[1] !== 0x01 || bytes[2] !== 0x01) {
+              reject(new Error(`Nordic buttonless DFU rejected bootloader entry: ${Array.from(bytes).join(" ")}`));
+              return;
+            }
+            resolve();
+          };
+          const timer = setTimeout(() => {
+            characteristic.removeEventListener("characteristicvaluechanged", onValue);
+            reject(new Error("Timed out waiting for Nordic buttonless DFU confirmation"));
+          }, 15000);
+          characteristic.addEventListener("characteristicvaluechanged", onValue);
+        });
+      }
+
+      async function connectBootloader(device) {
+        const deadline = Date.now() + 30000;
+        let lastError = null;
+        while (Date.now() < deadline) {
+          try {
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE);
+            const controlPoint = await service.getCharacteristic(CONTROL);
+            const packetCharacteristic = await service.getCharacteristic(PACKET);
+            await controlPoint.startNotifications();
+            controlPoint.addEventListener("characteristicvaluechanged", onControlNotification);
+            return { controlPoint, packetCharacteristic };
+          } catch (error) {
+            lastError = error;
+            if (device.gatt.connected) device.gatt.disconnect();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+        throw new Error(`Could not reconnect to the Nordic Secure DFU bootloader: ${lastError?.message || "timeout"}`);
+      }
+
+      async function command(bytes, opcode) {
+        const response = responseFor(opcode);
+        await control.writeValueWithResponse(bytes);
+        return response;
+      }
+
+      async function writePacket(bytes, start, end, progressBase, progressSpan) {
+        const packetSize = 20;
+        for (let offset = start; offset < end; offset += packetSize) {
+          const value = bytes.subarray(offset, Math.min(offset + packetSize, end));
+          if (packet.properties.writeWithoutResponse) await packet.writeValueWithoutResponse(value);
+          else await packet.writeValueWithResponse(value);
+          const done = offset + packetSize;
+          if ((offset / packetSize) % 64 === 0) {
+            els.progress.value = Math.min(99, progressBase + progressSpan * Math.min(done, bytes.length) / Math.max(1, bytes.length));
+          }
+        }
+      }
+
+      async function transferObject(type, bytes, label, progressBase, progressSpan) {
+        let offset = 0;
+        let selection = await command(new Uint8Array([0x06, type]), 0x06);
+        const maxObjectSize = read32(selection, 3);
+        let deviceOffset = read32(selection, 7);
+        let deviceCrc = read32(selection, 11);
+        if (!maxObjectSize) throw new Error("Nordic bootloader returned an invalid DFU object size");
+        if (deviceOffset > bytes.length || crc32(bytes.subarray(0, deviceOffset)) !== deviceCrc) {
+          log(`${label}: clearing an incompatible partial transfer.`);
+          await command(new Uint8Array([0x0c]), 0x0c);
+          selection = await command(new Uint8Array([0x06, type]), 0x06);
+          deviceOffset = read32(selection, 7);
+          deviceCrc = read32(selection, 11);
+          if (deviceOffset !== 0 || deviceCrc !== 0) throw new Error(`${label}: bootloader did not clear incompatible partial data`);
+        } else if (deviceOffset % maxObjectSize !== 0 && deviceOffset !== bytes.length) {
+          log(`${label}: discarding an incomplete DFU object and resuming from the last committed boundary.`);
+          await command(new Uint8Array([0x0c]), 0x0c);
+          selection = await command(new Uint8Array([0x06, type]), 0x06);
+          deviceOffset = read32(selection, 7);
+          deviceCrc = read32(selection, 11);
+          if (deviceOffset > bytes.length || crc32(bytes.subarray(0, deviceOffset)) !== deviceCrc) {
+            throw new Error(`${label}: bootloader state is inconsistent after clearing the incomplete object`);
+          }
+          offset = deviceOffset;
+        } else {
+          offset = deviceOffset;
+          if (offset) log(`${label}: resuming at ${offset} / ${bytes.length} bytes.`);
+        }
+        const objectCount = Math.ceil((bytes.length - offset) / maxObjectSize);
+        let objectIndex = 0;
+        while (offset < bytes.length) {
+          const objectLength = Math.min(maxObjectSize, bytes.length - offset);
+          const end = offset + objectLength;
+          await command(new Uint8Array([0x01, type, ...little32(objectLength)]), 0x01);
+          await writePacket(bytes, offset, end, progressBase, progressSpan);
+          const checksum = await command(new Uint8Array([0x03]), 0x03);
+          const deviceCrcNow = read32(checksum, 7);
+          const expectedCrc = crc32(bytes.subarray(0, end));
+          if (deviceCrcNow !== expectedCrc) {
+            throw new Error(`${label}: checksum mismatch at ${end} bytes (device ${deviceCrcNow.toString(16)}, file ${expectedCrc.toString(16)})`);
+          }
+          await command(new Uint8Array([0x04]), 0x04);
+          offset = end;
+          objectIndex++;
+          log(`${label}: object ${objectIndex}/${objectCount}, ${offset}/${bytes.length} bytes.`);
+        }
+      }
+
+      async function loadPackage(file) {
+        if (!window.JSZip) throw new Error("Could not load the ZIP reader. Reload this page while online.");
+        const zip = await JSZip.loadAsync(file);
+        const manifestFile = zip.file("manifest.json");
+        if (!manifestFile) throw new Error("This ZIP has no Nordic DFU manifest.json");
+        const manifest = JSON.parse(await manifestFile.async("text"));
+        const app = manifest.manifest?.application;
+        if (!app?.bin_file || !app?.dat_file) throw new Error("The Nordic DFU ZIP must contain one signed application and init packet");
+        const binEntry = zip.file(app.bin_file);
+        const datEntry = zip.file(app.dat_file);
+        if (!binEntry || !datEntry) throw new Error("The Nordic DFU ZIP is missing its application .bin or signed .dat file");
+        const [bin, dat] = await Promise.all([binEntry.async("uint8array"), datEntry.async("uint8array")]);
+        if (!bin.length || !dat.length) throw new Error("The Nordic DFU ZIP contains an empty application or init packet");
+        if (bin.length > 352 * 1024 || dat.length > 16 * 1024) throw new Error("Package exceeds the Rev.C Nordic flash limits");
+        return { bin, dat, name: app.bin_file };
+      }
+
+      els.file.addEventListener("change", async () => {
+        packageFiles = null;
+        els.connect.disabled = true;
+        els.info.textContent = "Reading package locally…";
+        const file = els.file.files?.[0];
+        if (!file) return;
+        try {
+          packageFiles = await loadPackage(file);
+          els.info.textContent = `${packageFiles.name} · ${(packageFiles.bin.length / 1024).toFixed(1)} KiB · signed init packet present. Signature and target compatibility are checked by the device bootloader.`;
+          els.connect.disabled = busy;
+        } catch (error) {
+          els.info.textContent = error.message;
+          log(`Package error: ${error.message}`);
+        }
+      });
+
+      els.connect.addEventListener("click", async () => {
+        if (busy || !packageFiles) return;
+        if (!navigator.bluetooth) {
+          log("Web Bluetooth is unavailable here. Open this HTTPS page in Chrome or Edge on a BLE-capable computer.");
+          return;
+        }
+        busy = true;
+        els.connect.disabled = true;
+        els.progress.value = 0;
+        els.log.textContent = "";
+        try {
+          log("Choose the Meerya Rev.C Nordic device advertising Nordic Secure DFU.");
+          const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE] }] });
+          let server = await device.gatt.connect();
+          let service = await server.getPrimaryService(SERVICE);
+          try {
+            const buttonless = await service.getCharacteristic(BUTTONLESS);
+            log("Connected to the QANI app. Requesting its buttonless transition into Nordic DFU mode.");
+            await buttonless.startNotifications();
+            const acknowledged = buttonlessResponse(buttonless);
+            await buttonless.writeValueWithResponse(new Uint8Array([0x01]));
+            await acknowledged;
+            server.disconnect();
+            log("Bootloader entry accepted. Waiting for the Nordic Secure DFU bootloader to restart.");
+            ({ controlPoint: control, packetCharacteristic: packet } = await connectBootloader(device));
+          } catch (error) {
+            if (error.name !== "NotFoundError") throw error;
+            control = await service.getCharacteristic(CONTROL);
+            packet = await service.getCharacteristic(PACKET);
+            await control.startNotifications();
+            control.addEventListener("characteristicvaluechanged", onControlNotification);
+          }
+          await command(new Uint8Array([0x02, 0x00, 0x00]), 0x02);
+          await transferObject(1, packageFiles.dat, "Signed init packet", 0, 5);
+          await transferObject(2, packageFiles.bin, "Apple NI application", 5, 94);
+          els.progress.value = 100;
+          log("DFU transfer complete. The Nordic bootloader is validating and activating the signed application.");
+          await device.gatt.disconnect();
+        } catch (error) {
+          log(`DFU stopped: ${error.message}`);
+        } finally {
+          busy = false;
+          els.connect.disabled = !packageFiles;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

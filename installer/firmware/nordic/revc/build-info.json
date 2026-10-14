@@ -1,0 +1,42 @@
+{
+  "name": "Meerya Rev.C Apple Nearby Interaction development firmware",
+  "target": {
+    "module": "Qorvo DWM3001CTR13",
+    "nordicSoc": "nRF52833",
+    "uwbRadio": "DW3110",
+    "hardwareVersion": 3
+  },
+  "build": {
+    "qorvoSdk": "DW3_QM33_SDK_1.1.1",
+    "nordicSdk": "nRF5 SDK 17.1.0",
+    "softdevice": "S113 7.2.0",
+    "softdeviceId": "0x102",
+    "compiler": "GNU Arm Embedded 10.3.1",
+    "appleNiSample": "QANI FreeRTOS DWM3001CDK module target",
+    "applicationVersion": 1,
+    "bootloaderVersion": 1,
+    "dfu": "Nordic Secure DFU over BLE"
+  },
+  "flashLayout": {
+    "applicationLimitExclusive": "0x55000",
+    "fds": ["0x63000", "0x64FFF"],
+    "bootloader": ["0x65000", "0x6AFFF"],
+    "qorvoCalibration": ["0x7B000", "0x7CFFF"],
+    "mbrParameters": "0x7E000",
+    "bootloaderSettings": "0x7F000"
+  },
+  "validation": {
+    "qaniBuild": "passed",
+    "secureBootloaderBuild": "passed",
+    "dfuPackageSignature": "generated with local development private key; package metadata inspected with nrfutil",
+    "hexAddressRanges": "checked; reserved FDS/calibration/MBR pages are absent from bootstrap HEX",
+    "revCHardwareFlashAndSmokeTest": "not performed"
+  },
+  "artifacts": {
+    "bootstrapHex": "revc-apple-ni-swd-bootstrap.hex",
+    "applicationHex": "revc-apple-ni-application.hex",
+    "signedBlePackage": "revc-apple-ni-dfu-v1.zip",
+    "secureBootloaderHex": "revc-secure-dfu-bootloader.hex",
+    "bootloaderSettingsHex": "revc-bootloader-settings.hex"
+  }
+}
