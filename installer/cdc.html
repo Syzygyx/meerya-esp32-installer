@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101820">
+  <title>Meerya USB firmware update</title>
+  <style>
+    :root { color-scheme:dark; --bg:#101820; --panel:#18242e; --line:#31414d; --text:#eef4f7; --muted:#b7c4cc; --accent:#86d7c5; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,sans-serif; }
+    main { width:min(860px,calc(100% - 32px)); margin:36px auto 64px; }
+    header,section { padding:24px; border:1px solid var(--line); border-radius:16px; background:var(--panel); margin-bottom:18px; }
+    h1,h2 { line-height:1.2; } h1 { font-size:clamp(1.8rem,5vw,2.6rem); margin:0 0 12px; } h2 { font-size:1.3rem; margin-top:0; }
+    a { color:var(--accent); } .muted { color:var(--muted); } nav,.actions { display:flex; flex-wrap:wrap; gap:12px; }
+    button,input { font:inherit; } button { padding:10px 16px; border:1px solid var(--accent); border-radius:8px; background:var(--accent); color:var(--bg); cursor:pointer; }
+    button.secondary { background:transparent; color:var(--text); border-color:var(--line); } button:disabled { opacity:.45; cursor:default; }
+    label { display:block; margin:16px 0; } input[type=file] { width:100%; } input[type=checkbox] { margin-right:8px; }
+    progress { width:100%; height:20px; accent-color:var(--accent); } pre { white-space:pre-wrap; overflow-wrap:anywhere; font:13px/1.6 ui-monospace,monospace; }
+    #log { max-height:240px; overflow:auto; background:#0b1116; padding:16px; border-radius:8px; } #status { font-weight:600; } #status[data-error=true] { color:#ffb8ac; }
+    @media(max-width:600px) { main { margin-top:12px; } header,section { padding:18px; } }
+  </style>
+</head>
+<body><main>
+  <header>
+    <h1>Update Meerya over USB</h1>
+    <p>Install an app image through Meerya’s running CDC console. No BOOT or EN sequence is needed when CDC OTA v1 is already installed.</p>
+    <nav aria-label="Installer pages"><a href="./">First install / ROM recovery</a><a href="./cli.html">Command-line installer</a></nav>
+  </header>
+  <section>
+    <h2>1. Connect the running device</h2>
+    <p class="muted">Use desktop Chrome or Edge over HTTPS or localhost. Close serial monitors and stop audio/camera calls. Choose Meerya’s native USB CDC port, not ESP-Prog or ROM download mode. Older firmware needs the first-install path.</p>
+    <div class="actions"><button id="connect">Connect &amp; inspect</button><button id="disconnect" class="secondary" disabled>Disconnect</button></div>
+    <pre id="device">No device connected.</pre>
+  </section>
+  <section>
+    <h2>2. Choose the app image</h2>
+    <p class="muted">Choose an app-only <code>.bin</code> for the exact board and USB profile. A matching ESP32-S3 chip or project name alone does not establish hardware compatibility.</p>
+    <label>Firmware file <input id="file" type="file" accept=".bin,application/octet-stream"></label>
+    <pre id="image">No firmware selected.</pre>
+    <label><input id="compatible" type="checkbox">This image matches the connected board and USB profile.</label>
+    <label><input id="reboot" type="checkbox" checked>Reboot after upload and confirm the running image.</label>
+    <div class="actions"><button id="update" disabled>Upload firmware</button><button id="cancel" class="secondary" disabled>Cancel upload</button></div>
+  </section>
+  <section>
+    <h2>Update status</h2>
+    <p id="status" role="status" aria-live="polite">Connect a device to begin.</p>
+    <progress id="progress" max="100" value="0" aria-label="Firmware upload progress"></progress>
+    <p class="muted">Keep USB connected through verification. Uploading writes an inactive app slot and preserves settings. A verified commit selects the next boot image; it does not by itself prove a successful boot. Automatic rollback depends on the device firmware configuration.</p>
+    <details><summary>Activity log</summary><pre id="log" tabindex="0"></pre></details>
+  </section>
+</main><script type="module" src="./cdc-installer.js"></script></body>
+</html>
