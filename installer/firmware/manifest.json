@@ -9,8 +9,8 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-10-14T19:45:36Z",
-  "gitHead": "local-revc-ble",
+  "generatedAt": "2026-10-25T19:23:14Z",
+  "gitHead": "58b4fd434ac6-dirty",
   "defaultTarget": "meerya-revc-uac",
   "targets": [
     {
@@ -83,13 +83,13 @@
     },
     {
       "id": "meerya-revc-uac",
-      "name": "Meerya Rev.C - UAC Full-Duplex Audio",
+      "name": "Meerya Rev.C - Half-Duplex Audio",
       "chip": "esp32s3",
       "baudRate": 460800,
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya Rev.C UAC\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC not compiled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled; BLE control enabled.",
+      "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya Rev.C UAC\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC available, runtime default disabled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled; BLE control enabled. Half-duplex echo suppression: microphone muted during speaker playback and for about one second afterward; simultaneous speech unsupported.",
       "status": "development-lab-local-debug",
       "bleBootloaderSupported": true,
       "quickTest": {
@@ -107,6 +107,7 @@
         "cameraExpected": false,
         "audioExpected": {
           "aecEnabled": false,
+          "halfDuplexEchoSuppression": true,
           "microphone": {
             "sampleRateHz": 48000,
             "channels": 1,
@@ -125,7 +126,7 @@
           "path": "firmware/meerya-revc-uac/bootloader.bin",
           "label": "Bootloader",
           "size": 21056,
-          "sha256": "0ed151f53f571b0fb4556ca1d76e1732d9bd5d35bb3cd4070c9c3654c8c326d7"
+          "sha256": "efb496a1afa38662b3b3deddbfc93deed577dc39b0bb549ab0624d4f1a277c9e"
         },
         {
           "address": 32768,
@@ -145,8 +146,8 @@
           "address": 131072,
           "path": "firmware/meerya-revc-uac/meerya_esp32.bin",
           "label": "Application",
-          "size": 1577952,
-          "sha256": "3d209c0bbc8b42488d374aa4d6fa36367204416033bcb1b1c349e56b5aafdecf"
+          "size": 1608752,
+          "sha256": "3f09b01ff65a7f9187516e9872ba946142a6b7f3de2e9b7c4c9f7ec8778b0bbb"
         }
       ]
     }

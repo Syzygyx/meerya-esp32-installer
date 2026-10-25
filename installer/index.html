@@ -734,7 +734,6 @@
   </style>
 </head>
 <body>
-    <p style="text-align:center;padding:12px"><a href="./cdc.html">Update running firmware over USB CDC (Web Serial)</a></p>
   <main>
     <header>
       <div>
@@ -746,7 +745,7 @@
         <span id="statusText">Idle</span>
       </div>
     </header>
-    <p><a href="./cli.html">ESP32 command-line flashing</a> · <a href="./nordic.html">Rev.C Nordic DFU and Apple NI installer</a></p>
+    <p><a href="./cdc.html">Update running firmware over USB CDC</a> · <a href="./cli.html">ESP32 command-line flashing</a> · <a href="./nordic.html">Rev.C Nordic DFU and Apple NI installer</a></p>
 
     <div class="installer-steps">
       <div class="installer-step">
@@ -2207,7 +2206,48 @@
       }
     }
 
+    async function runAudioHalfDuplexTest({ clear = true } = {}) {
+      if (!els.hostOutputSelect.value || !els.meeryaOutputSelect.value || !els.meeryaInputSelect.value) {
+        throw new Error("Half-duplex test needs computer speaker, Meerya speaker, and Meerya microphone.");
+      }
+      if (clear) clearAudioResults();
+      setAudioPanelState("running");
+      setAudioColumnState("duplex", "running", "Running");
+      setAudioTestState("Testing speaker-only echo suppression");
+      const far = generateTestPcm(48000, 3.0, 0.05);
+      const farCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
+      await delay(550);
+      await playWavToDevice(wavBlobFromPcm(far.pcm, far.sampleRate), els.meeryaOutputSelect.value);
+      const farCapture = await farCapturePromise;
+      const core = farCapture.pcm.slice(Math.round(farCapture.sampleRate * 0.8), Math.round(farCapture.sampleRate * 3.2));
+      if (core.length < farCapture.sampleRate * 2) throw new Error("Incomplete speaker-only recording");
+      const farStats = analyzePcm(core);
+      const echoSuppressed = farStats.rms < 0.00012;
+      addAudioResult("duplex", "Speaker-only microphone return", `${dbfs(farStats.rms).toFixed(1)} dBFS`, echoSuppressed);
+      addAudioPlaybackResult("duplex", "Play speaker-only return", wavBlobFromPcm(farCapture.pcm, farCapture.sampleRate));
+      await delay(1500);
+      setAudioTestState("Testing microphone after playback");
+      const near = generateTestPcm(48000, 3.0, 0.72);
+      const nearCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
+      await delay(550);
+      await playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value);
+      const capture = await nearCapturePromise;
+      const stats = analyzePcm(capture.pcm);
+      const waveform = compareWaveforms(near.pcm, capture.pcm, capture.sampleRate);
+      const microphoneOpen = stats.rms > 0.00012 && stats.peak > 0.0008 && stats.clippedRatio < 0.01 && waveform.score >= 0.12;
+      addAudioResult("duplex", "Microphone after playback", `${dbfs(stats.rms).toFixed(1)} dBFS; stimulus match ${Math.round(waveform.score * 100)}%`, microphoneOpen);
+      addAudioResult("duplex", "Conversation mode", "Take turns; microphone reopens about one second after speaker playback", null);
+      const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
+      addAudioPlaybackResult("duplex", "Play microphone return", recording);
+      const pass = echoSuppressed && microphoneOpen;
+      setAudioColumnState("duplex", pass ? "pass" : "fail", pass ? "Passed" : "Check");
+      setAudioPanelState(pass ? "pass" : "fail");
+      setAudioTestState(pass ? "Half-duplex checks passed" : "Half-duplex audio needs review");
+      return { pass, corePass: pass, halfDuplex: true, farStats, stats, recording, capturePcm: capture.pcm, sampleRate: capture.sampleRate };
+    }
+
     async function runAudioDuplexTest({ clear = true, readiness = null } = {}) {
+      if (expectedAudio()?.halfDuplexEchoSuppression) return runAudioHalfDuplexTest({ clear });
       readiness ??= await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running the duplex test.");
@@ -2393,7 +2433,7 @@
       if (!mic) {
         return "unknown";
       }
-      const aec = expected.aecEnabled ? "AEC on" : "AEC off";
+      const aec = expected.halfDuplexEchoSuppression ? "half-duplex echo suppression" : expected.aecEnabled ? "AEC on" : "AEC off";
       return `${mic.sampleRateHz} Hz, ${mic.channels} ch, ${mic.intervalMs} ms, ${mic.packetBytes} B @ ${mic.packetHz} Hz, ${aec}`;
     }
 
@@ -2416,7 +2456,7 @@
         failures.push(`mic interval ${runtimeIntervalMs} ms`);
       }
       const actualAec = Boolean(status.audio_settings?.aec_enabled);
-      if (actualAec !== Boolean(expected.aecEnabled)) {
+      if (!expected.halfDuplexEchoSuppression && actualAec !== Boolean(expected.aecEnabled)) {
         failures.push(`AEC ${actualAec ? "on" : "off"}`);
       }
       if (failures.length) {
@@ -2427,6 +2467,9 @@
 
     function renderTarget(target) {
       state.target = target;
+      const halfDuplex = Boolean(expectedAudio(target)?.halfDuplexEchoSuppression);
+      els.audioDuplexBtn.textContent = halfDuplex ? "Half-Duplex Test" : "Duplex Test";
+      els.audioDuplexColumn.querySelector(".audio-test-column-head strong").textContent = halfDuplex ? "Half Duplex" : "Duplex";
       const bleBootloaderSupported = target.bleBootloaderSupported !== false;
       els.bleBootloaderBtn.hidden = !bleBootloaderSupported;
       els.bleBootloaderHelp.textContent = bleBootloaderSupported
