@@ -738,7 +738,7 @@
     <header>
       <div>
         <h1>Meerya Firmware Installer</h1>
-        <p>Put the board in bootloader mode, connect, flash, and wait for Meerya audio to come back.</p>
+        <p>Connect Meerya to detect its updater. New firmware uses CDC; older firmware uses the guided ROM/esptool path.</p>
       </div>
       <div class="status" id="status" data-state="idle">
         <span class="status-dot"></span>
@@ -1012,6 +1012,7 @@
 
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js";
 
     const state = {
       manifest: null,
@@ -1019,6 +1020,8 @@
       port: null,
       transport: null,
       loader: null,
+      cdc: null,
+      cdcInfo: null,
       connected: false,
       meeryaAudioReady: false,
       audioAutoRunCompleted: false,
@@ -1125,16 +1128,8 @@
 
     function updateFlashControls() {
       els.bleBootloaderBtn.disabled = state.connected;
-      if (state.meeryaAudioReady) {
-        els.connectBtn.disabled = true;
-        els.flashBtn.disabled = true;
-        els.disconnectBtn.disabled = !state.connected;
-        if (!state.connected) {
-          setStatus("App audio detected", "done");
-          setProgress(0, "Meerya is running as audio. Use bootloader mode to flash.");
-        }
-        return;
-      }
+      // Running audio is compatible with CDC OTA; keep Connect available.
+      els.eraseAll.disabled = !!state.cdc;
       els.connectBtn.disabled = state.connected;
       els.flashBtn.disabled = !state.connected;
       els.disconnectBtn.disabled = !state.connected;
@@ -2605,6 +2600,47 @@
 
       setStatus("Selecting port");
       state.port = await navigator.serial.requestPort();
+      const identity = state.port.getInfo();
+      if (identity.usbVendorId === 0x303a && identity.usbProductId !== 0x1001) {
+        setStatus("Checking firmware updater");
+        const candidate = new CDCOTA(state.port, line => appendLog(line + "\n"));
+        try {
+          await candidate.open();
+          const info = await candidate.info();
+          if (info.active !== "0") {
+            await candidate.close();
+            state.port = null;
+            setStatus("Update already active", "error");
+            setProgress(0, "Another updater is active. Close it or wait for it to finish before reconnecting.");
+            updateFlashControls();
+            return;
+          }
+          if (identity.usbProductId !== 0x8007 || state.target.id !== "meerya-revc-uac") {
+            await candidate.close();
+            state.port = null;
+            setStatus("Check board selection", "error");
+            setProgress(0, "CDC auto-update is qualified for Meerya Rev.C only. Select the matching Rev.C target before reconnecting.");
+            updateFlashControls();
+            return;
+          }
+          state.cdc = candidate;
+          state.cdcInfo = info;
+          state.connected = true;
+          updateFlashControls();
+          setStatus("CDC updater detected", "ready");
+          setProgress(0, "Ready: update running firmware without BOOT/EN. Settings are preserved.");
+          return;
+        } catch (error) {
+          await candidate.close();
+          state.port = null;
+          updateFlashControls();
+          setStatus("Use ROM / esptool", "ready");
+          appendLog(`CDC updater unavailable: ${error.message}\n`);
+          setProgress(0, "This firmware has no responding CDC updater. Enter ROM with BOOT/EN (or Bluetooth Bootloader), then Connect again and select ESP32-S3 USB Serial/JTAG. The installer will use esptool.");
+          return;
+        }
+      }
+      // ROM USB Serial/JTAG and external serial adapters use esptool.
       state.transport = new Transport(state.port, true);
       state.loader = new ESPLoader({
         transport: state.transport,
@@ -2889,6 +2925,39 @@
     }
 
     async function flash() {
+      if (state.cdc) {
+        els.flashBtn.disabled = true;
+        els.disconnectBtn.disabled = true;
+        els.connectBtn.disabled = true;
+        setStatus("Updating through CDC");
+        try {
+          const files = await loadFirmwareFiles(state.target);
+          const app = files.find(file => file.address === 0x20000);
+          if (!app) throw new Error("The selected target has no compatible app image.");
+          const image = await inspectImage(new Blob([app.data]));
+          const before = await state.cdc.upload(image, {
+            stage: name => setStatus(`CDC: ${name}`),
+            progress: (written, total) => setProgress(Math.round(written * 100 / total), "Uploading application through CDC…"),
+          });
+          await state.cdc.send("reboot");
+          await state.cdc.close();
+          state.cdc = null;
+          await confirmBoot(state.port, {elf: image.elf, beforeElf: before.elf, beforeUptime: Number(before.uptime_ms)}, line => appendLog(line + "\n"));
+          appendLog("CDC reboot confirmed: selected firmware identity is running.\n");
+          setStatus("Testing", "ready");
+          await runPostFlashTest(state.target);
+          setStatus("Complete", "done");
+          setProgress(100, "CDC update and running firmware identity verified. Check USB audio below.");
+        } finally {
+          await state.cdc?.close();
+          state.cdc = null;
+          state.cdcInfo = null;
+          state.connected = false;
+          state.port = null;
+          updateFlashControls();
+        }
+        return;
+      }
       if (!state.connected || !state.loader) {
         throw new Error("Connect to the board before flashing.");
       }
@@ -2925,6 +2994,9 @@
     }
 
     async function disconnect() {
+      await state.cdc?.close();
+      state.cdc = null;
+      state.cdcInfo = null;
       if (state.transport) {
         await state.transport.disconnect();
       }
