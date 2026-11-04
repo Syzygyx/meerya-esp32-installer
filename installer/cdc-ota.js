@@ -60,7 +60,7 @@ export class CDCOTA {
         while ((end = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, end).replace(/^[>\s]+/, "").trim();
           buffer = buffer.slice(end + 1);
-          if (!line.startsWith("OTA ") && !line.startsWith("MICDIAG ")) continue;
+          if (!["OTA ", "MICDIAG ", "live-stats:", "cpu-utilization:", "usb-audio-", "speaker-counters:", "speaker-dcd:"].some(prefix => line.startsWith(prefix))) continue;
           // Data commands can be echoed by the console; never log firmware chunks.
           if (!line.startsWith("OTA ACK ")) this.log(line);
           const pending = this.waiter;

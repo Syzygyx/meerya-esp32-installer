@@ -1014,7 +1014,7 @@
 
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
-    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-micdiag";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-audio-debug";
 
     const state = {
       manifest: null,
@@ -1885,6 +1885,7 @@
         state.micDiagBusy = true;
         els.flashBtn.disabled = true; els.disconnectBtn.disabled = true;
         stream = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: els.meeryaInputSelect.value}, echoCancellation: false, noiseSuppression: false, autoGainControl: false}, video: false});
+        logMicrophoneTrack(stream.getAudioTracks()[0], "raw ADC test capture");
         context = new AudioContext();
         const source = context.createMediaStreamSource(stream), silent = context.createGain();
         silent.gain.value = 0; source.connect(silent); silent.connect(context.destination); await context.resume();
@@ -1898,6 +1899,7 @@
           }
           throw new Error("No complete raw ADC window. Check Meerya USB audio capture and retry.");
         };
+        await logUsbMicCounters("raw ADC test active");
         output.textContent = "Quiet baseline: please stay quiet…";
         const baseline = await measure();
         output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
@@ -1917,6 +1919,7 @@
         }
         output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. Slot 3 is configured as playback reference; verify its response during the tone. Physical mapping requires board confirmation. "), table);
         appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback}) + "\n");
+        await logUsbMicCounters("raw ADC test complete");
         state.pendingMicTestElf = null;
         return true;
       } catch (error) { output.textContent = "Microphone channel test: " + error.message; }
@@ -1952,40 +1955,57 @@
       } finally { state.micAutoStarting = false; updateFlashControls(); }
     }
 
+    function logMicrophoneTrack(track, stage) {
+      const settings = track.getSettings();
+      const format = Object.fromEntries(["sampleRate", "channelCount", "sampleSize", "echoCancellation", "noiseSuppression", "autoGainControl", "latency", "volume"].filter(key => key in settings).map(key => [key, settings[key]]));
+      appendLog(`MIC DEBUG ${stage}: ${JSON.stringify({label: track.label, enabled: track.enabled, muted: track.muted, readyState: track.readyState, format})}\n`);
+    }
+
+    async function logUsbMicCounters(stage) {
+      if (!state.cdc) { appendLog(`MIC DEBUG ${stage}: CDC not connected; raw/USB counters unavailable. Connect Meerya serial for device diagnostics.\n`); return; }
+      try {
+        appendLog(`MIC DEBUG ${stage}: requesting device USB stream counters…\n`);
+        await state.cdc.exchange("stats", line => line.startsWith("usb-audio-bytes:"), 4000);
+      } catch (error) { appendLog(`MIC DEBUG ${stage}: USB counters unavailable: ${error.message}\n`); }
+    }
+
     async function capturePcmFromDevice(inputDeviceId, durationMs) {
-      const constraints = {
-        audio: {
-          deviceId: inputDeviceId ? { exact: inputDeviceId } : undefined,
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-        video: false,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const context = new AudioContext({ sampleRate: 48000 });
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
+      const constraints = {audio: {deviceId: inputDeviceId ? {exact: inputDeviceId} : undefined, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false}, video: false};
+      let stream, context, source, processor;
       const chunks = [];
-      processor.onaudioprocess = (event) => {
-        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-      };
-      source.connect(processor);
-      processor.connect(context.destination);
-      await delay(durationMs);
-      processor.disconnect();
-      source.disconnect();
-      stream.getTracks().forEach((track) => track.stop());
-      await context.close();
-      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-      const pcm = new Float32Array(total);
-      let offset = 0;
-      chunks.forEach((chunk) => {
-        pcm.set(chunk, offset);
-        offset += chunk.length;
-      });
-      return { pcm, sampleRate: context.sampleRate };
+      let callbacks = 0, elapsedStart = performance.now();
+      appendLog(`MIC DEBUG capture request: duration=${durationMs}ms, mono, browser AEC/NS/AGC requested off\n`);
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const track = stream.getAudioTracks()[0];
+        logMicrophoneTrack(track, "opened");
+        track.onmute = () => logMicrophoneTrack(track, "mute event");
+        track.onunmute = () => logMicrophoneTrack(track, "unmute event");
+        track.onended = () => logMicrophoneTrack(track, "ended event");
+        context = new AudioContext({sampleRate: 48000});
+        await context.resume();
+        appendLog(`MIC DEBUG AudioContext: state=${context.state}, rate=${context.sampleRate}Hz\n`);
+        source = context.createMediaStreamSource(stream);
+        processor = context.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = event => { callbacks++; chunks.push(new Float32Array(event.inputBuffer.getChannelData(0))); };
+        source.connect(processor); processor.connect(context.destination);
+        await logUsbMicCounters("capture active/start");
+        await delay(durationMs);
+        await logUsbMicCounters("capture active/end");
+        logMicrophoneTrack(track, "before stop");
+      } catch (error) {
+        appendLog(`MIC DEBUG capture error: ${error.name}: ${error.message}\n`);
+        throw error;
+      } finally {
+        processor?.disconnect(); source?.disconnect();
+        stream?.getTracks().forEach(track => track.stop());
+        await context?.close();
+      }
+      const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0), pcm = new Float32Array(total);
+      let offset = 0, nonzero = 0, sumSq = 0, peak = 0;
+      for (const chunk of chunks) { pcm.set(chunk, offset); offset += chunk.length; for (const sample of chunk) { if (sample !== 0) nonzero++; sumSq += sample * sample; peak = Math.max(peak, Math.abs(sample)); } }
+      appendLog(`MIC DEBUG captured: ${JSON.stringify({callbacks, frames: total, elapsedMs: Math.round(performance.now()-elapsedStart), nonzeroSamples: nonzero, zeroSamples: total-nonzero, rms: Math.sqrt(sumSq/Math.max(1,total)), peak, allZero: total > 0 && nonzero === 0, noFrames: total === 0})}\n`);
+      return {pcm, sampleRate: context?.sampleRate || 48000};
     }
 
     function analyzePcm(pcm) {
