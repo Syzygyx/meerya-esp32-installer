@@ -888,7 +888,7 @@
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
             <button id="audioDuplexBtn" disabled>Duplex Test</button>
           </div>
-          <div id="micSlotsResult" role="status" style="overflow-x:auto; margin:12px 0">Connect Meerya serial and select its microphone to test every ADC channel.</div>
+          <div id="micSlotsResult" role="status" style="overflow-x:auto; margin:12px 0">After installation: quiet baseline, automatic speaker tone, then all four ADC measurements.</div>
           <div class="audio-test-columns">
             <section class="audio-test-column" id="audioInColumn" data-state="idle">
               <div class="audio-test-column-head">
@@ -1133,8 +1133,8 @@
       // Running audio is compatible with CDC OTA; keep Connect available.
       els.eraseAll.disabled = !!state.cdc;
       els.connectBtn.disabled = state.connected;
-      els.flashBtn.disabled = !state.connected;
-      els.disconnectBtn.disabled = !state.connected;
+      els.flashBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting;
+      els.disconnectBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting;
     }
 
     function resetQuickTest(stateText = "Not run", stateName = "idle") {
@@ -1874,7 +1874,7 @@
       }
     }
 
-    document.getElementById("micSlotsBtn").addEventListener("click", async () => {
+    async function runAllMicChannels() {
       const button = document.getElementById("micSlotsBtn"), output = document.getElementById("micSlotsResult");
       let stream, context;
       button.disabled = true;
@@ -1900,9 +1900,6 @@
         };
         output.textContent = "Quiet baseline: please stay quiet…";
         const baseline = await measure();
-        for (let n = 3; n > 0; --n) { output.textContent = `Speak and gently tap near each microphone in ${n}…`; await delay(1000); }
-        const windows = [];
-        for (let n = 0; n < 4; ++n) { output.textContent = "Speak and gently tap near each microphone now…"; windows.push(await measure()); }
         output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
         await cdc.send("tone");
         await delay(250);
@@ -1910,21 +1907,50 @@
         await delay(2000);
         const db = x => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
         const table = document.createElement("table");
-        table.createCaption().textContent = "ADC slot | speech/tap RMS | peak | lift | response | speaker-tone RMS";
+        table.createCaption().textContent = "ADC slot | quiet RMS | tone RMS | tone peak | lift | result";
         for (let slot = 0; slot < 4; ++slot) {
-          const samples = windows.map(w => w.channels[slot]), best = samples.reduce((a,b) => a.rms > b.rms ? a : b);
-          const clipped = samples.reduce((n,c) => n + c.clipped, 0), flat = samples.every(c => c.peak === 0);
-          const lift = 20 * Math.log10(Math.max(best.rms,1e-9) / Math.max(baseline.channels[slot].rms,1e-9));
-          const playbackLift = 20 * Math.log10(Math.max(playback.channels[slot].rms,1e-9) / Math.max(baseline.channels[slot].rms,1e-9));
-          const verdict = slot === 3 ? (playback.channels[slot].peak <= 2 ? "No playback-reference response" : playbackLift >= 6 ? "Playback-reference responding" : "Reference inconclusive") : flat || samples.every(c => c.peak <= 2) ? "Absent / near-zero signal" : clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Inconclusive—repeat with speech/taps";
+          const tone = playback.channels[slot], quiet = baseline.channels[slot];
+          const lift = 20 * Math.log10(Math.max(tone.rms,1e-9) / Math.max(quiet.rms,1e-9));
+          const verdict = tone.peak <= 2 ? "Absent / near-zero response" : tone.clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Weak / inconclusive response";
           const row = table.insertRow();
-          for (const value of [`ADC ${slot}`, `${db(best.rms)} dBFS RMS`, `${db(best.peak/32768)} dBFS peak`, `${lift.toFixed(1)} dB above baseline`, verdict, `${db(playback.channels[slot].rms)} dBFS during speaker tone`]) row.insertCell().textContent = value;
+          for (const value of [`ADC ${slot}${slot === 3 ? " (reference)" : ""}`, `${db(quiet.rms)} dBFS`, `${db(tone.rms)} dBFS`, `${db(tone.peak/32768)} dBFS`, `${lift.toFixed(1)} dB`, verdict]) row.insertCell().textContent = value;
         }
         output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. Slot 3 is configured as playback reference; verify its response during the tone. Physical mapping requires board confirmation. "), table);
-        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,windows,playback}) + "\n");
+        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback}) + "\n");
+        state.pendingMicTestElf = null;
+        return true;
       } catch (error) { output.textContent = "Microphone channel test: " + error.message; }
       finally { stream?.getTracks().forEach(track => track.stop()); await context?.close(); button.disabled = false; state.micDiagBusy = false; updateFlashControls(); }
-    });
+    }
+    document.getElementById("micSlotsBtn").addEventListener("click", runAllMicChannels);
+
+    async function resumeInstalledMicTest(port = null) {
+      if (!state.pendingMicTestElf || state.micAutoStarting || state.micDiagBusy) return;
+      const output = document.getElementById("micSlotsResult");
+      state.micAutoStarting = true;
+      try {
+        if (!state.cdc && port) {
+          await delay(2500);
+          const candidate = new CDCOTA(port, line => appendLog(line + "\n"));
+          try {
+            let timer;
+            const info = await Promise.race([
+              (async () => { await candidate.open(); return candidate.info(); })(),
+              new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Reconnect Meerya serial to continue the queued tone test.")), 6000); })
+            ]).finally(() => clearTimeout(timer));
+            if (info.elf.toLowerCase() !== state.pendingMicTestElf) throw new Error("Installed firmware identity does not match.");
+            state.cdc = candidate; state.cdcInfo = info; state.port = port; state.connected = true;
+          } catch (error) { await candidate.close(); throw error; }
+        }
+        if (!state.cdc || state.cdcInfo?.elf?.toLowerCase() !== state.pendingMicTestElf) throw new Error("Click Connect and select Meerya after reboot; the tone test will then start automatically.");
+        output.textContent = "Preparing automatic microphone test. Allow microphone access if prompted…";
+        await refreshAudioDevices();
+        await runAllMicChannels();
+      } catch (error) {
+        output.textContent = "Installed firmware: microphone test pending. " + error.message;
+        appendLog("Automatic ADC test pending: " + error.message + "\n");
+      } finally { state.micAutoStarting = false; updateFlashControls(); }
+    }
 
     async function capturePcmFromDevice(inputDeviceId, durationMs) {
       const constraints = {
@@ -2682,6 +2708,7 @@
           state.connected = true;
           updateFlashControls();
           setStatus("CDC updater detected", "ready");
+          if (state.pendingMicTestElf) void resumeInstalledMicTest();
           setProgress(0, "Ready: update running firmware without BOOT/EN. Settings are preserved.");
           return;
         } catch (error) {
@@ -2985,6 +3012,7 @@
         els.disconnectBtn.disabled = true;
         els.connectBtn.disabled = true;
         setStatus("Updating through CDC");
+        let installedPort = null;
         try {
           const files = await loadFirmwareFiles(state.target);
           const app = files.find(file => file.address === 0x20000);
@@ -2994,6 +3022,8 @@
             stage: name => setStatus(`CDC: ${name}`),
             progress: (written, total) => setProgress(Math.round(written * 100 / total), "Uploading application through CDC…"),
           });
+          state.pendingMicTestElf = image.elf;
+          installedPort = state.port;
           setStatus("Confirming reboot");
           setProgress(100, "Image committed. Reconnecting to verify running firmware…");
           await state.cdc.send("reboot");
@@ -3012,6 +3042,7 @@
           state.connected = false;
           state.port = null;
           updateFlashControls();
+          if (installedPort) void resumeInstalledMicTest(installedPort);
         }
         return;
       }
@@ -3038,13 +3069,22 @@
         },
       });
 
+      if (state.target.id === "meerya-revc-uac") {
+        const app = fileArray.find(file => file.address === 0x20000);
+        state.pendingMicTestElf = (await inspectImage(new Blob([app.data]))).elf;
+      }
       appendLog("Flash complete. Resetting board...\n");
       await resetBoardIntoApp();
       setStatus("Testing", "ready");
       setProgress(100, "Firmware installed. Running post-flash test...");
       await runPostFlashTest(state.target);
       state.audioAutoRunCompleted = false;
-      await maybeAutoRunAudioSmokeTest();
+      if (state.pendingMicTestElf) {
+        const installedPort = state.port;
+        await state.transport?.disconnect();
+        state.transport = null; state.loader = null; state.connected = false; state.port = null;
+        void resumeInstalledMicTest(installedPort);
+      } else await maybeAutoRunAudioSmokeTest();
       setStatus("Complete", "done");
       setProgress(100, "Firmware installed. Post-flash test finished.");
       els.disconnectBtn.disabled = false;
