@@ -9,8 +9,8 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-10-25T19:23:14Z",
-  "gitHead": "58b4fd434ac6-dirty",
+  "generatedAt": "2026-11-04T19:16:51Z",
+  "gitHead": "58b4fd434ac6-iad-20261104",
   "defaultTarget": "meerya-revc-uac",
   "targets": [
     {
@@ -90,7 +90,7 @@
       "flashFreq": "80m",
       "flashSize": "16MB",
       "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya Rev.C UAC\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC available, runtime default disabled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled; BLE control enabled. Half-duplex echo suppression: microphone muted during speaker playback and for about one second afterward; simultaneous speech unsupported.",
-      "status": "development-lab-local-debug",
+      "status": "development-lab-current-main",
       "bleBootloaderSupported": true,
       "quickTest": {
         "statusUrls": [
@@ -146,8 +146,8 @@
           "address": 131072,
           "path": "firmware/meerya-revc-uac/meerya_esp32.bin",
           "label": "Application",
-          "size": 1608752,
-          "sha256": "3f09b01ff65a7f9187516e9872ba946142a6b7f3de2e9b7c4c9f7ec8778b0bbb"
+          "size": 1608816,
+          "sha256": "453a239c7473c12a38b0b94f2a431d985e94a5ff297d15976b8ad187a6748201"
         }
       ]
     }
