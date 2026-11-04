@@ -60,13 +60,13 @@ export class CDCOTA {
         while ((end = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, end).replace(/^[>\s]+/, "").trim();
           buffer = buffer.slice(end + 1);
-          if (!line.startsWith("OTA ")) continue;
+          if (!line.startsWith("OTA ") && !line.startsWith("MICDIAG ")) continue;
           // Data commands can be echoed by the console; never log firmware chunks.
           if (!line.startsWith("OTA ACK ")) this.log(line);
           const pending = this.waiter;
           if (!pending) continue;
           try {
-            if (line.startsWith("OTA ERR ")) throw new Error(line);
+            if (line.startsWith("OTA ERR ") || line.startsWith("MICDIAG ERR ")) throw new Error(line);
             if (pending.accept(line)) pending.finish(null, line);
           } catch (error) { pending.finish(error); }
         }

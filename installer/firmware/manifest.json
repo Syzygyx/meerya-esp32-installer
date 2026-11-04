@@ -146,8 +146,8 @@
           "address": 131072,
           "path": "firmware/meerya-revc-uac/meerya_esp32.bin",
           "label": "Application",
-          "size": 1608816,
-          "sha256": "453a239c7473c12a38b0b94f2a431d985e94a5ff297d15976b8ad187a6748201"
+          "size": 1609984,
+          "sha256": "36668a3df53c893cd0ccac45626d4318ffc63ca2def6418258d593ef92025002"
         }
       ]
     }

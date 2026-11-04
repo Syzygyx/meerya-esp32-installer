@@ -883,6 +883,8 @@
           </div>
           <div class="audio-test-actions">
             <button id="audioRefreshBtn">Refresh Devices</button>
+            <button id="micSlotsBtn">Test all 4 ADC channels</button>
+            <div id="micSlotsResult" role="status">Connect Meerya serial and select its microphone to test every ADC channel.</div>
             <button id="audioHostToMeeryaBtn" disabled>Computer → Meerya Mic</button>
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
             <button id="audioDuplexBtn" disabled>Duplex Test</button>
@@ -1012,7 +1014,7 @@
 
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
-    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-reconnect";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-micdiag";
 
     const state = {
       manifest: null,
@@ -1871,6 +1873,58 @@
         await decodeContext.close();
       }
     }
+
+    document.getElementById("micSlotsBtn").addEventListener("click", async () => {
+      const button = document.getElementById("micSlotsBtn"), output = document.getElementById("micSlotsResult");
+      let stream, context;
+      button.disabled = true;
+      try {
+        if (!state.cdc || !state.connected) throw new Error("Connect Meerya serial first. Older firmware needs an update for channel diagnostics.");
+        if (!els.meeryaInputSelect.value || !selectedOptionLabel(els.meeryaInputSelect).toLowerCase().includes("meerya")) throw new Error("Refresh Devices and select the Meerya microphone first.");
+        const cdc = state.cdc;
+        state.micDiagBusy = true;
+        els.flashBtn.disabled = true; els.disconnectBtn.disabled = true;
+        stream = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: els.meeryaInputSelect.value}, echoCancellation: false, noiseSuppression: false, autoGainControl: false}, video: false});
+        context = new AudioContext();
+        const source = context.createMediaStreamSource(stream), silent = context.createGain();
+        silent.gain.value = 0; source.connect(silent); silent.connect(context.destination); await context.resume();
+        const measure = async () => {
+          const arm = JSON.parse((await cdc.exchange("micdiag arm", line => line.startsWith("MICDIAG {"), 4000)).slice(8));
+          for (let i = 0; i < 12; ++i) {
+            await delay(250);
+            const data = JSON.parse((await cdc.exchange("micdiag status", line => line.startsWith("MICDIAG {"), 4000)).slice(8));
+            if (data.generation !== arm.generation) throw new Error("Channel measurement was replaced; retry.");
+            if (data.complete && data.frames >= 16000 && data.channels?.length === 4) return data;
+          }
+          throw new Error("No complete raw ADC window. Check Meerya USB audio capture and retry.");
+        };
+        output.textContent = "Quiet baseline: please stay quiet…";
+        const baseline = await measure();
+        for (let n = 3; n > 0; --n) { output.textContent = `Speak and gently tap near each microphone in ${n}…`; await delay(1000); }
+        const windows = [];
+        for (let n = 0; n < 4; ++n) { output.textContent = "Speak and gently tap near each microphone now…"; windows.push(await measure()); }
+        output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
+        await cdc.send("tone");
+        await delay(250);
+        const playback = await measure();
+        await delay(2000);
+        const db = x => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
+        const table = document.createElement("table");
+        table.createCaption().textContent = "ADC slot | speech/tap RMS | peak | lift | response | speaker-tone RMS";
+        for (let slot = 0; slot < 4; ++slot) {
+          const samples = windows.map(w => w.channels[slot]), best = samples.reduce((a,b) => a.rms > b.rms ? a : b);
+          const clipped = samples.reduce((n,c) => n + c.clipped, 0), flat = samples.every(c => c.peak === 0);
+          const lift = 20 * Math.log10(Math.max(best.rms,1e-9) / Math.max(baseline.channels[slot].rms,1e-9));
+          const playbackLift = 20 * Math.log10(Math.max(playback.channels[slot].rms,1e-9) / Math.max(baseline.channels[slot].rms,1e-9));
+          const verdict = slot === 3 ? (playback.channels[slot].peak <= 2 ? "No playback-reference response" : playbackLift >= 6 ? "Playback-reference responding" : "Reference inconclusive") : flat || samples.every(c => c.peak <= 2) ? "Absent / near-zero signal" : clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Inconclusive—repeat with speech/taps";
+          const row = table.insertRow();
+          for (const value of [`ADC ${slot}`, `${db(best.rms)} dBFS RMS`, `${db(best.peak/32768)} dBFS peak`, `${lift.toFixed(1)} dB above baseline`, verdict, `${db(playback.channels[slot].rms)} dBFS during speaker tone`]) row.insertCell().textContent = value;
+        }
+        output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. Slot 3 is configured as playback reference; verify its response during the tone. Physical mapping requires board confirmation. "), table);
+        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,windows,playback}) + "\n");
+      } catch (error) { output.textContent = "Microphone channel test: " + error.message; }
+      finally { stream?.getTracks().forEach(track => track.stop()); await context?.close(); button.disabled = false; state.micDiagBusy = false; updateFlashControls(); }
+    });
 
     async function capturePcmFromDevice(inputDeviceId, durationMs) {
       const constraints = {
@@ -2925,6 +2979,7 @@
     }
 
     async function flash() {
+      if (state.micDiagBusy) throw new Error("Wait for the microphone channel test to finish.");
       if (state.cdc) {
         els.flashBtn.disabled = true;
         els.disconnectBtn.disabled = true;
