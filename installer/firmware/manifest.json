@@ -9,8 +9,8 @@
     "perDeviceProvisioning": false,
     "note": "Browser firmware is for development and field diagnostics. Production devices require the signed manufacturing package and per-device encrypted NVS provisioning."
   },
-  "generatedAt": "2026-11-04T19:16:51Z",
-  "gitHead": "58b4fd434ac6-iad-20261104",
+  "generatedAt": "2026-11-04T20:33:23Z",
+  "gitHead": "58b4fd434ac6-micdiag-20261104",
   "defaultTarget": "meerya-revc-uac",
   "targets": [
     {
