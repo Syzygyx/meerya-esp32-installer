@@ -2601,7 +2601,7 @@
       setStatus("Selecting port");
       state.port = await navigator.serial.requestPort();
       const identity = state.port.getInfo();
-      if (identity.usbVendorId === 0x303a && identity.usbProductId !== 0x1001) {
+      if (identity.usbVendorId === 0x303a && ![0x1001, 0x0009].includes(identity.usbProductId)) {
         setStatus("Checking firmware updater");
         const candidate = new CDCOTA(state.port, line => appendLog(line + "\n"));
         try {
