@@ -1012,7 +1012,7 @@
 
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
-    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-cleanup";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-reconnect";
 
     const state = {
       manifest: null,
@@ -2939,6 +2939,8 @@
             stage: name => setStatus(`CDC: ${name}`),
             progress: (written, total) => setProgress(Math.round(written * 100 / total), "Uploading application through CDC…"),
           });
+          setStatus("Confirming reboot");
+          setProgress(100, "Image committed. Reconnecting to verify running firmware…");
           await state.cdc.send("reboot");
           await state.cdc.close();
           state.cdc = null;

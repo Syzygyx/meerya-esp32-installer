@@ -193,8 +193,11 @@ export async function confirmBoot(port, expected, log) {
   while (Date.now() < deadline) {
     const check = new CDCOTA(port, log);
     try {
-      await check.open();
-      const info = await check.info();
+      let timer;
+      const info = await Promise.race([
+        (async () => { await check.open(); return check.info(); })(),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("USB reconnect timed out.")), 6000); })
+      ]).finally(() => clearTimeout(timer));
       if (info.elf.toLowerCase() === expected.elf &&
           (info.elf.toLowerCase() !== expected.beforeElf || Number(info.uptime_ms) < expected.beforeUptime)) {
         return info;
