@@ -1630,7 +1630,11 @@
     }
 
     function isMeeryaDevice(device) {
-      return /meerya|uac1|esp32/i.test(deviceLabel(device));
+      const label = deviceLabel(device).trim();
+      // macOS CoreAudio can expose USB UAC endpoints using their USB interface
+      // names alone ("microphone" and "speaker").
+      if (/meerya|uac1|esp32/i.test(label)) return true;
+      return /^(microphone|speaker)$/i.test(label);
     }
 
     function scoreHostDevice(device) {
