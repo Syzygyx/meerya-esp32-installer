@@ -165,12 +165,21 @@ export class CDCOTA {
   async close() {
     this.closing = true;
     this.waiter?.finish(new Error("Serial connection closed."));
-    try { await this.reader?.cancel(); } catch { /* Already disconnected. */ }
-    await this.readTask;
-    try { await this.writer?.abort(); } catch { /* Already disconnected. */ }
+    // Chromium can leave serial cleanup promises pending after native USB
+    // re-enumerates. Bound cleanup so boot verification can reconnect.
+    const cleanup = async operation => {
+      let timer;
+      try {
+        await Promise.race([operation(), new Promise(resolve => { timer = setTimeout(resolve, 1500); })]);
+      } catch { /* Already disconnected. */ }
+      finally { clearTimeout(timer); }
+    };
+    await cleanup(() => this.reader?.cancel());
+    await cleanup(() => this.readTask);
+    await cleanup(() => this.writer?.abort());
     try { this.writer?.releaseLock(); } catch { /* Already released. */ }
-    try { await this.port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch { /* Already disconnected. */ }
-    try { await this.port.close(); } catch { /* Already disconnected. */ }
+    await cleanup(() => this.port.setSignals({ dataTerminalReady: false, requestToSend: false }));
+    await cleanup(() => this.port.close());
     this.writer = null;
     this.reader = null;
     this.closed = true;
