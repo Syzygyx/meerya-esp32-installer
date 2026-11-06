@@ -1,0 +1,15 @@
+{
+  "name": "Experimental Rev.C three-mic beamforming + Espressif AEC",
+  "date": "2026-11-06",
+  "elf": "ae1e2730d0f991525f42b47246c68fa1ebd60d275fddefe7c529e046a97da9a5",
+  "sha256": "d225083360badffeb2f0196956c694f95e772de904273ae8309f5b71d3ca3caa",
+  "persistentBoot": true,
+  "labMacPinning": false,
+  "beamforming": "Three acoustic microphone channels, fixed local-calibration WOLA weights, FFT 512",
+  "limitations": [
+    "Far-field distance and alternate positions not yet qualified",
+    "Other Rev.C boards and Windows audio path need testing",
+    "Full-duplex production readiness unproven"
+  ],
+  "recovery": "Select Meerya Rev.C - Half-Duplex Audio in the installer. If CDC is unavailable, enter BOOT/EN and use ROM serial flashing."
+}

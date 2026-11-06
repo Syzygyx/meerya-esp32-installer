@@ -2532,7 +2532,7 @@
       if (!mic) {
         return "unknown";
       }
-      const aec = expected.halfDuplexEchoSuppression ? "half-duplex echo suppression" : expected.aecEnabled ? "AEC on" : "AEC off";
+      const aec = expected.experimentalBeamforming ? "experimental 3-mic beamforming + Espressif AEC" : expected.halfDuplexEchoSuppression ? "half-duplex echo suppression" : expected.aecEnabled ? "AEC on" : "AEC off";
       return `${mic.sampleRateHz} Hz, ${mic.channels} ch, ${mic.intervalMs} ms, ${mic.packetBytes} B @ ${mic.packetHz} Hz, ${aec}`;
     }
 
