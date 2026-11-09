@@ -790,6 +790,12 @@
           <p id="progressText">Waiting for a board.</p>
         </div>
 
+        <div class="quick-test" aria-live="polite">
+          <strong>Running firmware</strong>
+          <p id="runningFirmware">Not checked. Connect Meerya serial to read the running firmware.</p>
+          <button id="readRunningFirmware" type="button" disabled>Read running version</button>
+        </div>
+
         <div class="quick-test" id="quickTestPanel" data-state="idle">
           <div class="quick-test-head">
             <strong>Post-Flash Test</strong>
@@ -1148,7 +1154,24 @@
       hideWifiSetup();
     }
 
+    function showRunningFirmware(info) {
+      const version = info.version || "Version unavailable (older firmware)";
+      document.getElementById("runningFirmware").textContent =
+        `${version} · ELF ${info.elf} · partition ${info.running} · read ${new Date().toLocaleString()}`;
+      document.getElementById("readRunningFirmware").disabled = !state.cdc;
+      appendLog(`Running firmware: version=${info.version || "unknown"} elf=${info.elf} partition=${info.running}\n`);
+    }
+    document.getElementById("readRunningFirmware").addEventListener("click", async () => {
+      try {
+        if (!state.cdc) throw new Error("Connect Meerya serial first.");
+        showRunningFirmware(await state.cdc.info());
+      } catch (error) { handleError(error); }
+    });
+
     function rememberFirmwareStatus(url, status) {
+      if (status.firmware_version) {
+        document.getElementById("runningFirmware").textContent = `${status.firmware_version} · reported by ${url} · read ${new Date().toLocaleString()}`;
+      }
       state.lastFirmwareStatusPayload = {
         copiedAt: new Date().toISOString(),
         sourceUrl: url,
@@ -2729,6 +2752,7 @@
           }
           state.cdc = candidate;
           state.cdcInfo = info;
+          showRunningFirmware(info);
           state.connected = true;
           updateFlashControls();
           setStatus("CDC updater detected", "ready");
@@ -3053,7 +3077,8 @@
           await state.cdc.send("reboot");
           await state.cdc.close();
           state.cdc = null;
-          await confirmBoot(state.port, {elf: image.elf, beforeElf: before.elf, beforeUptime: Number(before.uptime_ms)}, line => appendLog(line + "\n"));
+          const runningInfo = await confirmBoot(state.port, {elf: image.elf, beforeElf: before.elf, beforeUptime: Number(before.uptime_ms)}, line => appendLog(line + "\n"));
+          showRunningFirmware(runningInfo);
           appendLog("CDC reboot confirmed: selected firmware identity is running.\n");
           setStatus("Testing", "ready");
           await runPostFlashTest(state.target);
