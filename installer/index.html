@@ -1929,6 +1929,7 @@
         };
         await logUsbMicCounters("raw ADC test active");
         output.textContent = "Quiet baseline: please stay quiet…";
+        await delay(1500);
         const baseline = await measure();
         output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
         if (!els.meeryaOutputSelect.value) throw new Error("Select the Meerya speaker first.");
@@ -1940,19 +1941,27 @@
         const playback = await measure();
         const playbackError = await playbackDone;
         if (playbackError) throw playbackError;
-        await delay(2000);
+        await delay(1500);
+        output.textContent = "Playing computer-speaker tone to check microphone ADC inputs…";
+        if (!els.hostOutputSelect.value) throw new Error("Select a computer speaker for the microphone stimulus.");
+        const near = generateTestPcm(48000, 4, 0.72);
+        const nearDone = playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value).then(() => null, error => error);
+        await delay(600);
+        const acoustic = await measure();
+        const nearError = await nearDone;
+        if (nearError) throw nearError;
         const db = x => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
         const table = document.createElement("table");
         table.createCaption().textContent = "ADC slot | quiet RMS | tone RMS | tone peak | lift | result";
         for (let slot = 0; slot < 4; ++slot) {
-          const tone = playback.channels[slot], quiet = baseline.channels[slot];
+          const tone = (slot === 3 ? playback : acoustic).channels[slot], quiet = baseline.channels[slot];
           const lift = 20 * Math.log10(Math.max(tone.rms,1e-9) / Math.max(quiet.rms,1e-9));
           const verdict = tone.peak <= 2 ? "Absent / near-zero response" : tone.clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Weak / inconclusive response";
           const row = table.insertRow();
           for (const value of [`ADC ${slot}${slot === 3 ? " (reference)" : ""}`, `${db(quiet.rms)} dBFS`, `${db(tone.rms)} dBFS`, `${db(tone.peak/32768)} dBFS`, `${lift.toFixed(1)} dB`, verdict]) row.insertCell().textContent = value;
         }
-        output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. Slot 3 is configured as playback reference; verify its response during the tone. Physical mapping requires board confirmation. "), table);
-        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback}) + "\n");
+        output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. ADC 0–2 use the computer-speaker stimulus; slot 3 uses the Meerya-speaker stimulus as playback reference. Physical mapping requires board confirmation. "), table);
+        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback,acoustic}) + "\n");
         await logUsbMicCounters("raw ADC test complete");
         state.pendingMicTestElf = null;
         return true;
