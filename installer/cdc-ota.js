@@ -191,7 +191,16 @@ export async function confirmBoot(port, expected, log) {
   await pause(2000);
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
-    const check = new CDCOTA(port, log);
+    // Refresh Chromium's port handle after native USB re-enumeration. Only
+    // read a replacement when exactly one previously permitted matching port exists.
+    const identity = port.getInfo();
+    const ports = await navigator.serial.getPorts();
+    const matching = ports.filter(p => {
+      const id = p.getInfo();
+      return id.usbVendorId === identity.usbVendorId && id.usbProductId === identity.usbProductId;
+    });
+    const candidate = matching.length === 1 ? matching[0] : port;
+    const check = new CDCOTA(candidate, log);
     try {
       let timer;
       const info = await Promise.race([

@@ -1020,7 +1020,7 @@
 
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
-    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-audio-debug";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261109-reconnect";
 
     const state = {
       manifest: null,
@@ -1741,7 +1741,7 @@
     }
 
     async function autoRunAudioSuiteIfReady(readiness, { force = false } = {}) {
-      if (!force && (state.audioAutoRunCompleted || state.audioAutoRunInProgress)) {
+      if (state.firmwareBusy || state.micDiagBusy || state.audioTestBusy || (!force && (state.audioAutoRunCompleted || state.audioAutoRunInProgress))) {
         return;
       }
       if (!canRunFullAudioSuite(readiness)) {
@@ -1908,6 +1908,7 @@
       try {
         if (!state.cdc || !state.connected) throw new Error("Connect Meerya serial first. Older firmware needs an update for channel diagnostics.");
         if (!els.meeryaInputSelect.value || !selectedOptionLabel(els.meeryaInputSelect).toLowerCase().includes("meerya")) throw new Error("Refresh Devices and select the Meerya microphone first.");
+        if (state.audioTestBusy || state.firmwareBusy) throw new Error("Wait for the current test or firmware update to finish.");
         const cdc = state.cdc;
         state.micDiagBusy = true;
         els.flashBtn.disabled = true; els.disconnectBtn.disabled = true;
@@ -1930,9 +1931,15 @@
         output.textContent = "Quiet baseline: please stay quiet…";
         const baseline = await measure();
         output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
-        await cdc.send("tone");
-        await delay(250);
+        if (!els.meeryaOutputSelect.value) throw new Error("Select the Meerya speaker first.");
+        const stimulus = generateTonePcm(48000, 4, 1000, 0.35);
+        const playing = playWavToDevice(wavBlobFromPcm(stimulus.pcm, stimulus.sampleRate), els.meeryaOutputSelect.value);
+        // Attach rejection handling immediately while the ADC measurement runs.
+        const playbackDone = playing.then(() => null, error => error);
+        await delay(600);
         const playback = await measure();
+        const playbackError = await playbackDone;
+        if (playbackError) throw playbackError;
         await delay(2000);
         const db = x => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
         const table = document.createElement("table");
@@ -2368,7 +2375,13 @@
       return { pass, corePass: pass, halfDuplex: true, farStats, stats, recording, capturePcm: capture.pcm, sampleRate: capture.sampleRate };
     }
 
-    async function runAudioDuplexTest({ clear = true, readiness = null } = {}) {
+    async function runAudioDuplexTest(options = {}) {
+      if (state.audioTestBusy || state.micDiagBusy || state.firmwareBusy) return;
+      state.audioTestBusy = true;
+      try { return await runAudioDuplexTestImpl(options); }
+      finally { state.audioTestBusy = false; }
+    }
+    async function runAudioDuplexTestImpl({ clear = true, readiness = null } = {}) {
       if (expectedAudio()?.halfDuplexEchoSuppression) return runAudioHalfDuplexTest({ clear });
       readiness ??= await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
@@ -3054,6 +3067,12 @@
     }
 
     async function flash() {
+      if (state.audioTestBusy || state.micDiagBusy) throw new Error("Wait for the audio test to finish before flashing.");
+      state.firmwareBusy = true;
+      try { return await flashImpl(); }
+      finally { state.firmwareBusy = false; }
+    }
+    async function flashImpl() {
       if (state.micDiagBusy) throw new Error("Wait for the microphone channel test to finish.");
       if (state.cdc) {
         els.flashBtn.disabled = true;
