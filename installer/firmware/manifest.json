@@ -89,8 +89,8 @@
       "flashMode": "dio",
       "flashFreq": "80m",
       "flashSize": "16MB",
-      "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya Rev.C UAC\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC available, runtime default disabled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled; BLE control enabled.",
-      "status": "development-lab-local-debug",
+      "description": "Development-lab Meerya Rev.C speakerphone browser-installer firmware. This image is not a production security package. USB product \"Meerya\", VID 0x303A/PID 0x8007, 1-channel 48 kHz microphone, 1 ms USB microphone IN packets (96 bytes at 1000 Hz), serviced in 10 ms batches (960 bytes), AEC available, runtime default disabled, Windows UAC1 profile. Camera disabled; CDC serial enabled; HID control disabled; BLE control enabled.",
+      "status": "development-lab-current-main",
       "bleBootloaderSupported": true,
       "quickTest": {
         "statusUrls": [
@@ -148,8 +148,8 @@
           "address": 131072,
           "path": "firmware/meerya-revc-uac/meerya_esp32.bin",
           "label": "Application",
-          "size": 1609872,
-          "sha256": "be6d8efbafab2e306696d1029bcd32cdc86d1ad25541b974d435bb5e49e75461"
+          "size": 1609840,
+          "sha256": "44d0568e2995c5da33f049d3acd49f487ce8bfc188cecf4e587e87e523dbbade"
         }
       ]
     },
