@@ -893,7 +893,10 @@
             <button id="audioHostToMeeryaBtn" disabled>Computer → Meerya Mic</button>
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
             <button id="audioDuplexBtn" disabled>Duplex Test</button>
+            <button id="speakerVolumeBtn" type="button">Test speaker volume</button>
           </div>
+          <p>Speaker-volume test: set Windows and app volume to 100%, disable enhancements and communications ducking, and keep the computer microphone at a fixed distance (for example, 50 cm). Two short tones will play. This measures relative response, not calibrated loudness or dB SPL.</p>
+          <div id="speakerVolumeResult" role="status">Speaker volume not tested.</div>
           <div id="micSlotsResult" role="status" style="overflow-x:auto; margin:12px 0">After installation: quiet baseline, automatic speaker tone, then all four ADC measurements.</div>
           <div class="audio-test-columns">
             <section class="audio-test-column" id="audioInColumn" data-state="idle">
@@ -1621,6 +1624,7 @@
         ...readRows(els.audioDuplexResults),
       ];
       return {
+        speakerVolume: state.speakerVolumeReport || null,
         panelState: els.audioTestPanel.dataset.state || "",
         stateText: els.audioTestState.textContent.trim(),
         pass: els.audioTestPanel.dataset.state === "pass"
@@ -2253,6 +2257,50 @@
         hasStrongMatch,
       };
     }
+
+    async function runSpeakerVolumeTest() {
+      const button = document.getElementById("speakerVolumeBtn");
+      const output = document.getElementById("speakerVolumeResult");
+      if (state.audioTestBusy || state.micDiagBusy || state.firmwareBusy) throw new Error("Wait for the current test or update to finish.");
+      state.audioTestBusy = true; button.disabled = true;
+      state.speakerVolumeReport = { status: "running" };
+      try {
+        await refreshAudioDevices();
+        const mic = selectedOptionLabel(els.hostInputSelect);
+        const speaker = selectedOptionLabel(els.meeryaOutputSelect);
+        if (!els.hostInputSelect.value || /meerya/i.test(mic)) throw new Error("Select a computer microphone, not Meerya, for the acoustic measurement.");
+        if (!els.meeryaOutputSelect.value || !/meerya/i.test(speaker)) throw new Error("Select the Meerya speaker.");
+        output.textContent = "Measuring room baseline; please stay quiet…";
+        const baselineCapture = await capturePcmFromDevice(els.hostInputSelect.value, 4200);
+        const baseline = analyzePcm(baselineCapture.pcm);
+        const measurements = [];
+        for (const gain of [0.12, 0.24]) {
+          output.textContent = `Playing speaker stimulus at ${gain === 0.12 ? "lower" : "higher"} level…`;
+          measurements.push(await runAudioPathTest({ label: `Speaker volume gain ${gain}`, column: "out", outputSelect: els.meeryaOutputSelect, inputSelect: els.hostInputSelect, clear: measurements.length === 0, playbackGain: gain }));
+          await delay(1000);
+        }
+        const [low, high] = measurements;
+        const noiseLiftDb = dbfs(high.stats.rms) - dbfs(baseline.rms);
+        const levelIncreaseDb = dbfs(high.stats.rms) - dbfs(low.stats.rms);
+        const signalDetected = high.quality.pass && noiseLiftDb >= 6;
+        const levelTracks = levelIncreaseDb >= 3 && levelIncreaseDb <= 9;
+        state.speakerVolumeReport = {
+          status: signalDetected && levelTracks ? "relative-response-pass" : "review",
+          calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false,
+          microphone: mic, speaker, gains: [0.12, 0.24],
+          baselineDbfs: dbfs(baseline.rms), lowDbfs: dbfs(low.stats.rms), highDbfs: dbfs(high.stats.rms),
+          noiseLiftDb, levelIncreaseDb, stimulusMatch: high.waveform.score,
+          clippedRatio: high.stats.clippedRatio,
+        };
+        output.textContent = `${signalDetected && levelTracks ? "Relative speaker response detected" : "Speaker volume needs review"}: baseline ${dbfs(baseline.rms).toFixed(1)} dBFS; low ${dbfs(low.stats.rms).toFixed(1)} dBFS; high ${dbfs(high.stats.rms).toFixed(1)} dBFS; above room noise ${noiseLiftDb.toFixed(1)} dB; level increase ${levelIncreaseDb.toFixed(1)} dB (expected about 6 dB). Windows/app volume and firmware gain are not readable by this browser test. This does not certify room loudness; keep mic placement fixed when comparing laptops.`;
+        appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
+      } catch (error) {
+        state.speakerVolumeReport = {status: "error", error: error.message};
+        output.textContent = "Speaker volume test: " + error.message;
+        throw error;
+      } finally { state.audioTestBusy = false; button.disabled = false; }
+    }
+    document.getElementById("speakerVolumeBtn").addEventListener("click", () => runSpeakerVolumeTest().catch(handleError));
 
     async function runAudioPathTest({
       label,
@@ -3252,6 +3300,7 @@
     window.meeryaInstallerAudio = {
       refreshDevices: refreshAudioDevices,
       runDuplexTest: () => runAudioDuplexTest({ clear: true }),
+      runSpeakerVolumeTest,
       report: collectAudioTestReport,
     };
 
