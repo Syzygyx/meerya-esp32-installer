@@ -2285,6 +2285,7 @@
       if (state.audioTestBusy || state.micDiagBusy || state.firmwareBusy) throw new Error("Wait for the current test or update to finish.");
       state.audioTestBusy = true; button.disabled = true;
       state.speakerVolumeReport = { status: "running" };
+      setAudioPanelState("running"); setAudioTestState("Testing speaker volume");
       try {
         await refreshAudioDevices();
         const mic = selectedOptionLabel(els.hostInputSelect);
@@ -2293,12 +2294,14 @@
         if (!els.meeryaOutputSelect.value || !/meerya/i.test(speaker)) throw new Error("Select the Meerya speaker.");
         output.textContent = "Measuring room baseline; please stay quiet…";
         const baselineCapture = await capturePcmFromDevice(els.hostInputSelect.value, 4200);
+        if (baselineCapture.pcm.length < baselineCapture.sampleRate) throw new Error("Microphone capture was too short. Check microphone access and retry.");
         const baseline = analyzePcm(baselineCapture.pcm);
         if (dbfs(baseline.rms) > -15 || baseline.clippedRatio > 0.01) {
           state.speakerVolumeReport = {status: "review", reason: "invalid-baseline", microphone: mic, speaker,
             baselineDbfs: dbfs(baseline.rms), baselineClippedRatio: baseline.clippedRatio,
             calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false};
           output.textContent = "Recording baseline too high for a reliable volume test. Adjust microphone input or room noise and retry.";
+          setAudioPanelState("fail"); setAudioTestState("Speaker volume needs review");
           suggestVolumeAdjustment(state.speakerVolumeReport);
           appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
           return;
@@ -2323,10 +2326,13 @@
           clippedRatio: high.stats.clippedRatio,
         };
         output.textContent = `${signalDetected && levelTracks ? "Relative speaker response detected" : "Speaker volume needs review"}: baseline ${dbfs(baseline.rms).toFixed(1)} dBFS; low ${dbfs(low.stats.rms).toFixed(1)} dBFS; high ${dbfs(high.stats.rms).toFixed(1)} dBFS; above room noise ${noiseLiftDb.toFixed(1)} dB; level increase ${levelIncreaseDb.toFixed(1)} dB (expected about 6 dB). Windows/app volume and firmware gain are not readable by this browser test. This does not certify room loudness; keep mic placement fixed when comparing laptops.`;
+        setAudioPanelState(state.speakerVolumeReport.status === "review" ? "fail" : "pass");
+        setAudioTestState(state.speakerVolumeReport.status === "review" ? "Speaker volume needs review" : "Relative speaker response passed");
         if (state.speakerVolumeReport.status === "review") suggestVolumeAdjustment(state.speakerVolumeReport);
         appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
       } catch (error) {
         state.speakerVolumeReport = {status: "error", error: error.message};
+        setAudioPanelState("fail"); setAudioTestState("Speaker volume test error");
         output.textContent = "Speaker volume test: " + error.message;
         throw error;
       } finally { state.audioTestBusy = false; button.disabled = false; }
