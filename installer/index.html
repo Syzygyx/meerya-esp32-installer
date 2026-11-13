@@ -713,6 +713,68 @@
       margin-top: 14px;
     }
 
+    .test-only {
+      display: none;
+    }
+
+    html[data-mode="test"] .install-only {
+      display: none !important;
+    }
+
+    html[data-mode="test"] .test-only {
+      display: block;
+    }
+
+    html[data-mode="test"] .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    html[data-mode="test"] main {
+      max-width: 1180px;
+    }
+
+    html[data-mode="test"] .audio-test {
+      margin-top: 0;
+    }
+
+    html[data-mode="test"] .test-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+
+    html[data-mode="test"] .test-actions .primary {
+      min-width: 220px;
+    }
+
+    html[data-mode="test"] .test-intro {
+      margin-bottom: 18px;
+    }
+
+    html[data-mode="test"] .recorded-comparison {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    html[data-mode="test"] .recorded-comparison h2 {
+      margin-top: 0;
+    }
+
+    html[data-mode="test"] .recorded-comparison iframe {
+      display: block;
+      width: 100%;
+      min-height: 920px;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0a0a0a;
+    }
+
     @media (max-width: 840px) {
       header,
       .layout,
@@ -745,9 +807,9 @@
         <span id="statusText">Idle</span>
       </div>
     </header>
-    <p><a href="./cdc.html">Update running firmware over USB CDC</a> · <a href="./cli.html">ESP32 command-line flashing</a> · <a href="./nordic.html">Rev.C Nordic DFU and Apple NI installer</a></p>
+    <p class="install-only"><a href="./cdc.html">Update running firmware over USB CDC</a> · <a href="./cli.html">ESP32 command-line flashing</a> · <a href="./nordic.html">Rev.C Nordic DFU and Apple NI installer</a></p>
 
-    <div class="installer-steps">
+    <div class="installer-steps install-only">
       <div class="installer-step">
         <b>1. Bootloader</b>
         <span>For first install, enter ROM with BOOT and EN. Bluetooth works only when the firmware already running on Meerya includes BLE control.</span>
@@ -768,35 +830,29 @@
 
     <div class="layout">
       <section>
-        <h2>Flash Meerya</h2>
-        <div class="note">
+        <h2 class="install-only">Flash Meerya</h2>
+        <div class="note install-only">
           <p><strong>Initial install:</strong> use the Rev.C J6 BOOT/EN sequence below; BLE cannot start bootloader mode on a blank device or firmware without BLE control. For later updates from a BLE-enabled build, use Bluetooth Bootloader, then connect over Web Serial.</p>
         </div>
 
-        <div class="bootloader-actions">
+        <div class="bootloader-actions install-only">
           <button id="bleBootloaderBtn" type="button">Use Bluetooth Bootloader</button>
           <p id="bleBootloaderHelp">Chrome/Edge can ask Meerya over encrypted Bluetooth to reboot into the ESP32-S3 bootloader. If Bluetooth is unavailable, use the physical BOOT button instructions.</p>
           <p id="physicalBootHelp" class="muted">Physical entry: hold BOOT low, pulse EN low, release EN while continuing to hold BOOT, then release BOOT after the ROM bootloader starts.</p>
         </div>
 
-        <div class="controls">
+        <div class="controls install-only">
           <button id="connectBtn">1. Connect</button>
           <button id="flashBtn" class="primary" disabled>2. Flash and Restart</button>
           <button id="disconnectBtn" disabled>Disconnect</button>
         </div>
 
-        <div class="progress">
+        <div class="progress install-only">
           <progress id="progress" value="0" max="100"></progress>
           <p id="progressText">Waiting for a board.</p>
         </div>
 
-        <div class="quick-test" aria-live="polite">
-          <strong>Running firmware</strong>
-          <p id="runningFirmware">Not checked. Connect Meerya serial to read the running firmware.</p>
-          <button id="readRunningFirmware" type="button" disabled>Read running version</button>
-        </div>
-
-        <div class="quick-test" id="quickTestPanel" data-state="idle">
+        <div class="quick-test install-only" id="quickTestPanel" data-state="idle">
           <div class="quick-test-head">
             <strong>Post-Flash Test</strong>
             <div class="quick-test-actions">
@@ -808,7 +864,7 @@
           <div class="quick-test-links" id="quickTestLinks"></div>
         </div>
 
-        <details class="advanced-panel">
+        <details class="advanced-panel install-only">
           <summary>Firmware Details</summary>
           <div class="advanced-panel-body">
             <label for="targetSelect">Target build</label>
@@ -836,7 +892,7 @@
           </div>
         </details>
 
-        <div class="wifi-setup" id="wifiSetupPanel" data-visible="false">
+        <div class="wifi-setup install-only" id="wifiSetupPanel" data-visible="false">
           <div class="quick-test-head">
             <strong>WiFi Setup</strong>
             <span id="wifiSetupState">Hidden</span>
@@ -865,13 +921,23 @@
         </div>
 
         <div class="audio-test" id="audioTestPanel">
+          <div class="test-only test-intro">
+            <h2>Test Meerya</h2>
+            <p>Verify that Meerya appears as a USB microphone and speaker, then exercise its microphone pickup, speaker output, and simultaneous duplex audio. This page cannot install or update firmware.</p>
+            <div class="test-actions">
+              <button id="runMeeryaTestBtn" class="primary" type="button">Run Meerya test</button>
+              <button id="testSerialBtn" type="button">Connect microphone diagnostics</button>
+              <button id="testSerialDisconnectBtn" type="button" disabled>Disconnect diagnostics</button>
+              <span id="testSerialState" class="muted">Serial diagnostics optional</span>
+            </div>
+          </div>
           <div class="quick-test-head">
             <strong>Audio Smoke Test</strong>
             <span id="audioTestState">Not run</span>
           </div>
           <div class="audio-test-grid">
             <div>
-              <label for="hostOutputSelect">Computer speaker</label>
+              <label for="hostOutputSelect">Patient-side speaker (local output)</label>
               <select id="hostOutputSelect"></select>
             </div>
             <div>
@@ -889,15 +955,14 @@
           </div>
           <div class="audio-test-actions">
             <button id="audioRefreshBtn">Refresh Devices</button>
-            <button id="micSlotsBtn">Test all 4 ADC channels</button>
+            <button id="micSlotsBtn">Test 3 microphone inputs (ADC 0–2)</button>
+            <button id="rawArrayCaptureBtn">Record patient-speaker target (4 channels)</button>
+            <button id="rawArrayInterfererBtn">Record Meerya-speaker interferer (4 channels)</button>
             <button id="audioHostToMeeryaBtn" disabled>Computer → Meerya Mic</button>
             <button id="audioMeeryaToHostBtn" disabled>Meerya Speaker → Computer</button>
             <button id="audioDuplexBtn" disabled>Duplex Test</button>
-            <button id="speakerVolumeBtn" type="button">Test speaker volume</button>
           </div>
-          <p>Speaker-volume test: set Windows and app volume to 100%, disable enhancements and communications ducking, and keep the computer microphone at a fixed distance (for example, 50 cm). Two short tones will play. This measures relative response, not calibrated loudness or dB SPL.</p>
-          <div id="speakerVolumeResult" role="status">Speaker volume not tested.</div>
-          <div id="micSlotsResult" role="status" style="overflow-x:auto; margin:12px 0">After installation: quiet baseline, automatic speaker tone, then all four ADC measurements.</div>
+          <div id="micSlotsResult" role="status" style="overflow-x:auto; margin:12px 0">For beam calibration, capture the local patient-side speaker alone as the target, then Meerya’s speaker alone as the interferer. Keep the other speaker silent for each capture. ADC 0–2 are the microphones; ADC 3 is Meerya’s electrical speaker reference, not a fourth microphone.</div>
           <div class="audio-test-columns">
             <section class="audio-test-column" id="audioInColumn" data-state="idle">
               <div class="audio-test-column-head">
@@ -922,9 +987,20 @@
             </section>
           </div>
         </div>
+
+        <section class="test-only recorded-comparison" aria-labelledby="recordedComparisonTitle">
+          <h2 id="recordedComparisonTitle">Nate’s recorded speakerphone comparison</h2>
+          <p>This is the original four-clip soundboard from Nate’s email, preserved unchanged for subjective listening. It is prerecorded reference material, not a live pass/fail measurement. The real Meerya checks are above.</p>
+          <iframe
+            title="Nate's prerecorded speakerphone comparison"
+            src="test/speakerphone_comparison.html"
+            loading="lazy"
+            allow="autoplay"
+          ></iframe>
+        </section>
       </section>
 
-      <aside class="note">
+      <aside class="note install-only">
         <h2>Before Flashing</h2>
         <p><strong>Browser:</strong> Chrome or Edge on a secure page. Safari does not expose Web Serial.</p>
         <div class="bootloader-guide">
@@ -980,7 +1056,7 @@
       <div class="terminal" id="terminal"></div>
     </section>
 
-    <section class="native-panel" id="nativePanel" data-available="false">
+    <section class="native-panel install-only" id="nativePanel" data-available="false">
       <h2>Nearby Interaction</h2>
       <div class="native-grid">
         <div class="native-field">
@@ -1021,16 +1097,16 @@
     </section>
   </main>
 
-  <dialog id="volumeAdviceDialog" aria-labelledby="volumeAdviceTitle" style="max-width:34rem;padding:1.5rem;border-radius:12px;color:#eee;background:#20242c;border:1px solid #768294;">
-    <h2 id="volumeAdviceTitle">Check audio settings before retrying</h2>
-    <p id="volumeAdviceText"></p>
-    <p id="volumeAdviceEvidence"></p>
-    <button id="volumeAdviceClose" type="button">Close</button>
-    <button id="volumeAdviceRetry" type="button">Retry speaker volume test</button>
-  </dialog>
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
-    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261109-reconnect";
+    import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-audio-debug";
+
+    const TEST_MODE = document.documentElement.dataset.mode === "test";
+    if (TEST_MODE) {
+      document.title = "Meerya Speakerphone Test";
+      document.querySelector("header h1").textContent = "Meerya Speakerphone Test";
+      document.querySelector("header p").textContent = "Connect Meerya by USB, then verify its microphone, speaker, and duplex audio without installing firmware.";
+    }
 
     const state = {
       manifest: null,
@@ -1095,9 +1171,15 @@
       meeryaOutputSelect: document.getElementById("meeryaOutputSelect"),
       hostInputSelect: document.getElementById("hostInputSelect"),
       audioRefreshBtn: document.getElementById("audioRefreshBtn"),
+      rawArrayCaptureBtn: document.getElementById("rawArrayCaptureBtn"),
+      rawArrayInterfererBtn: document.getElementById("rawArrayInterfererBtn"),
       audioHostToMeeryaBtn: document.getElementById("audioHostToMeeryaBtn"),
       audioMeeryaToHostBtn: document.getElementById("audioMeeryaToHostBtn"),
       audioDuplexBtn: document.getElementById("audioDuplexBtn"),
+      runMeeryaTestBtn: document.getElementById("runMeeryaTestBtn"),
+      testSerialBtn: document.getElementById("testSerialBtn"),
+      testSerialDisconnectBtn: document.getElementById("testSerialDisconnectBtn"),
+      testSerialState: document.getElementById("testSerialState"),
       terminal: document.getElementById("terminal"),
       nativePanel: document.getElementById("nativePanel"),
       nativeBridgeState: document.getElementById("nativeBridgeState"),
@@ -1164,24 +1246,7 @@
       hideWifiSetup();
     }
 
-    function showRunningFirmware(info) {
-      const version = info.version || "Version unavailable (older firmware)";
-      document.getElementById("runningFirmware").textContent =
-        `${version} · ELF ${info.elf} · partition ${info.running} · read ${new Date().toLocaleString()}`;
-      document.getElementById("readRunningFirmware").disabled = !state.cdc;
-      appendLog(`Running firmware: version=${info.version || "unknown"} elf=${info.elf} partition=${info.running}\n`);
-    }
-    document.getElementById("readRunningFirmware").addEventListener("click", async () => {
-      try {
-        if (!state.cdc) throw new Error("Connect Meerya serial first.");
-        showRunningFirmware(await state.cdc.info());
-      } catch (error) { handleError(error); }
-    });
-
     function rememberFirmwareStatus(url, status) {
-      if (status.firmware_version) {
-        document.getElementById("runningFirmware").textContent = `${status.firmware_version} · reported by ${url} · read ${new Date().toLocaleString()}`;
-      }
       state.lastFirmwareStatusPayload = {
         copiedAt: new Date().toISOString(),
         sourceUrl: url,
@@ -1631,7 +1696,6 @@
         ...readRows(els.audioDuplexResults),
       ];
       return {
-        speakerVolume: state.speakerVolumeReport || null,
         panelState: els.audioTestPanel.dataset.state || "",
         stateText: els.audioTestState.textContent.trim(),
         pass: els.audioTestPanel.dataset.state === "pass"
@@ -1655,6 +1719,7 @@
           meeryaOutput: selectedOptionLabel(els.meeryaOutputSelect),
           hostInput: selectedOptionLabel(els.hostInputSelect),
         },
+        microphoneDiagnostics: state.micDiagnostics || { status: "not-run" },
         log: els.terminal.textContent.slice(-12000),
       };
     }
@@ -1752,7 +1817,8 @@
     }
 
     async function autoRunAudioSuiteIfReady(readiness, { force = false } = {}) {
-      if (state.firmwareBusy || state.micDiagBusy || state.audioTestBusy || (!force && (state.audioAutoRunCompleted || state.audioAutoRunInProgress))) {
+      if (TEST_MODE) return;
+      if (!force && (state.audioAutoRunCompleted || state.audioAutoRunInProgress)) {
         return;
       }
       if (!canRunFullAudioSuite(readiness)) {
@@ -1879,15 +1945,22 @@
     async function playWavToDevice(blob, outputDeviceId) {
       const audio = new Audio(URL.createObjectURL(blob));
       audio.preload = "auto";
-      if (outputDeviceId && typeof audio.setSinkId === "function") {
+      if (outputDeviceId) {
+        if (typeof audio.setSinkId !== "function") {
+          URL.revokeObjectURL(audio.src);
+          throw new Error("This browser cannot route the test stimulus to the selected patient-side speaker.");
+        }
         await audio.setSinkId(outputDeviceId);
       }
       await audio.play();
+      const playbackStartMs = performance.now();
       await new Promise((resolve, reject) => {
         audio.onended = resolve;
         audio.onerror = () => reject(new Error("WAV playback failed"));
       });
+      const playbackEndMs = performance.now();
       URL.revokeObjectURL(audio.src);
+      return { playbackStartMs, playbackEndMs };
     }
 
     async function loadSpeechStimulus() {
@@ -1915,21 +1988,26 @@
     async function runAllMicChannels() {
       const button = document.getElementById("micSlotsBtn"), output = document.getElementById("micSlotsResult");
       let stream, context;
+      state.micDiagnostics = { status: "running" };
       button.disabled = true;
       try {
         if (!state.cdc || !state.connected) throw new Error("Connect Meerya serial first. Older firmware needs an update for channel diagnostics.");
         if (!els.meeryaInputSelect.value || !selectedOptionLabel(els.meeryaInputSelect).toLowerCase().includes("meerya")) throw new Error("Refresh Devices and select the Meerya microphone first.");
-        if (state.audioTestBusy || state.firmwareBusy) throw new Error("Wait for the current test or firmware update to finish.");
         const cdc = state.cdc;
         state.micDiagBusy = true;
         els.flashBtn.disabled = true; els.disconnectBtn.disabled = true;
         stream = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: els.meeryaInputSelect.value}, echoCancellation: false, noiseSuppression: false, autoGainControl: false}, video: false});
         logMicrophoneTrack(stream.getAudioTracks()[0], "raw ADC test capture");
-        context = new AudioContext();
+        context = new AudioContext({sampleRate: 48000});
         const source = context.createMediaStreamSource(stream), silent = context.createGain();
         silent.gain.value = 0; source.connect(silent); silent.connect(context.destination); await context.resume();
-        const measure = async () => {
+        const measure = async (duringCapture = null) => {
           const arm = JSON.parse((await cdc.exchange("micdiag arm", line => line.startsWith("MICDIAG {"), 4000)).slice(8));
+          // Start the local patient-side speaker after the device has armed its
+          // raw-ADC window. Do not use the board's `tone` command here: that
+          // exercises Meerya's own DAC/reference path, not the local-speaker
+          // acoustic path into the three microphone inputs.
+          if (duringCapture) await duringCapture();
           for (let i = 0; i < 12; ++i) {
             await delay(250);
             const data = JSON.parse((await cdc.exchange("micdiag status", line => line.startsWith("MICDIAG {"), 4000)).slice(8));
@@ -1940,46 +2018,159 @@
         };
         await logUsbMicCounters("raw ADC test active");
         output.textContent = "Quiet baseline: please stay quiet…";
-        await delay(1500);
         const baseline = await measure();
-        output.textContent = "Playing a three-second speaker tone to check ADC reference response…";
-        if (!els.meeryaOutputSelect.value) throw new Error("Select the Meerya speaker first.");
-        const stimulus = generateTonePcm(48000, 4, 1000, 0.35);
-        const playing = playWavToDevice(wavBlobFromPcm(stimulus.pcm, stimulus.sampleRate), els.meeryaOutputSelect.value);
-        // Attach rejection handling immediately while the ADC measurement runs.
-        const playbackDone = playing.then(() => null, error => error);
-        await delay(600);
-        const playback = await measure();
-        const playbackError = await playbackDone;
-        if (playbackError) throw playbackError;
-        await delay(1500);
-        output.textContent = "Playing computer-speaker tone to check microphone ADC inputs…";
-        if (!els.hostOutputSelect.value) throw new Error("Select a computer speaker for the microphone stimulus.");
-        const near = generateTestPcm(48000, 4, 0.72);
-        const nearDone = playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value).then(() => null, error => error);
-        await delay(600);
-        const acoustic = await measure();
-        const nearError = await nearDone;
-        if (nearError) throw nearError;
+        if (!els.hostOutputSelect.value) throw new Error("Select the local patient-side speaker output first.");
+        const tonePcm = generateTonePcm(48000, 3.0, 1000, 0.10);
+        output.textContent = `Playing a 1 kHz test tone through ${selectedOptionLabel(els.hostOutputSelect)}; measuring the three Meerya microphone channels…`;
+        appendLog(`MICDIAG stimulus: local patient-side speaker, device=${selectedOptionLabel(els.hostOutputSelect)}, 1kHz, 3s; ADC3 is electrical Meerya speaker reference, not a mic.\n`);
+        const playback = await measure(() => playWavToDevice(wavBlobFromPcm(tonePcm.pcm, tonePcm.sampleRate), els.hostOutputSelect.value));
+        await delay(2000);
         const db = x => (20 * Math.log10(Math.max(x, 1e-9))).toFixed(1);
         const table = document.createElement("table");
         table.createCaption().textContent = "ADC slot | quiet RMS | tone RMS | tone peak | lift | result";
+        const channels = [];
         for (let slot = 0; slot < 4; ++slot) {
-          const tone = (slot === 3 ? playback : acoustic).channels[slot], quiet = baseline.channels[slot];
+          const tone = playback.channels[slot], quiet = baseline.channels[slot];
           const lift = 20 * Math.log10(Math.max(tone.rms,1e-9) / Math.max(quiet.rms,1e-9));
-          const verdict = tone.peak <= 2 ? "Absent / near-zero response" : tone.clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Weak / inconclusive response";
+          const verdict = slot === 3
+            ? "Reference lane only; local-speaker tone need not appear here"
+            : tone.peak <= 2 ? "Absent / near-zero response" : tone.clipped ? "Clipping detected" : lift >= 6 ? "Responding" : "Weak / inconclusive response";
+          channels.push({slot, verdict, liftDb: lift, rms: tone.rms, peak: tone.peak, clipped: tone.clipped});
           const row = table.insertRow();
-          for (const value of [`ADC ${slot}${slot === 3 ? " (reference)" : ""}`, `${db(quiet.rms)} dBFS`, `${db(tone.rms)} dBFS`, `${db(tone.peak/32768)} dBFS`, `${lift.toFixed(1)} dB`, verdict]) row.insertCell().textContent = value;
+          for (const value of [slot === 3 ? "ADC 3 (Meerya speaker reference)" : `ADC ${slot} (mic input)`, `${db(quiet.rms)} dBFS`, `${db(tone.rms)} dBFS`, `${db(tone.peak/32768)} dBFS`, `${lift.toFixed(1)} dB`, verdict]) row.insertCell().textContent = value;
         }
-        output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. ADC 0–2 use the computer-speaker stimulus; slot 3 uses the Meerya-speaker stimulus as playback reference. Physical mapping requires board confirmation. "), table);
-        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback,acoustic}) + "\n");
+        output.replaceChildren(document.createTextNode("Raw ADC measurements before mono selection, AEC and mute. ADC 0–2 are the mic candidates and should respond to the local patient-side tone. ADC 3 is Meerya's electrical playback reference and is not expected to respond to an external/local speaker. Physical mic-to-slot mapping still requires board confirmation. "), table);
+        appendLog("Microphone ADC diagnostics: " + JSON.stringify({baseline,playback}) + "\n");
         await logUsbMicCounters("raw ADC test complete");
-        state.pendingMicTestElf = null;
-        return true;
-      } catch (error) { output.textContent = "Microphone channel test: " + error.message; }
+        const pass = channels.filter(channel => channel.slot < 3).every(channel => channel.verdict === "Responding");
+        state.micDiagnostics = {status: pass ? "passed" : "review", channels, baseline, playback};
+        if (pass) state.pendingMicTestElf = null;
+        return pass;
+      } catch (error) {
+        state.micDiagnostics = {status: "error", error: error.message};
+        output.textContent = "Microphone channel test: " + error.message;
+        appendLog(output.textContent + "\n");
+        return false;
+      }
       finally { stream?.getTracks().forEach(track => track.stop()); await context?.close(); button.disabled = false; state.micDiagBusy = false; updateFlashControls(); }
     }
     document.getElementById("micSlotsBtn").addEventListener("click", runAllMicChannels);
+
+    function makeInterleavedWav(channels, sampleRate) {
+      const frameCount = channels[0].length;
+      if (channels.length !== 4 || channels.some((channel) => channel.length !== frameCount)) {
+        throw new Error("Raw array capture is incomplete or not four-channel.");
+      }
+      const bytesPerSample = 2, headerBytes = 44;
+      const buffer = new ArrayBuffer(headerBytes + frameCount * channels.length * bytesPerSample);
+      const view = new DataView(buffer);
+      const writeString = (offset, value) => [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+      writeString(0, "RIFF"); view.setUint32(4, buffer.byteLength - 8, true); writeString(8, "WAVE");
+      writeString(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, 4, true); view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 4 * bytesPerSample, true); view.setUint16(32, 4 * bytesPerSample, true);
+      view.setUint16(34, 16, true); writeString(36, "data"); view.setUint32(40, frameCount * 4 * bytesPerSample, true);
+      let offset = headerBytes;
+      for (let frame = 0; frame < frameCount; frame++) {
+        for (let channel = 0; channel < 4; channel++) {
+          const sample = Math.max(-1, Math.min(1, channels[channel][frame]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true); offset += 2;
+        }
+      }
+      return new Blob([buffer], { type: "audio/wav" });
+    }
+
+    async function recordRawArray({ outputSelect, role, filenamePrefix }) {
+      const buttons = [els.rawArrayCaptureBtn, els.rawArrayInterfererBtn];
+      const output = document.getElementById("micSlotsResult");
+      let stream, context, source, processor, mute;
+      buttons.forEach(button => button.disabled = true);
+      try {
+        if (!els.meeryaInputSelect.value || !isMeeryaDevice({ label: selectedOptionLabel(els.meeryaInputSelect) })) {
+          throw new Error("Refresh Devices and select the Meerya 4-channel array microphone first.");
+        }
+        if (!outputSelect.value) throw new Error(`Select the ${role} output first.`);
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: els.meeryaInputSelect.value }, channelCount: { exact: 4 }, sampleRate: { exact: 48000 },
+            echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false,
+        });
+        const track = stream.getAudioTracks()[0], settings = track.getSettings();
+        if (settings.channelCount !== 4 || settings.sampleRate !== 48000) {
+          throw new Error(`The selected endpoint opened as ${settings.channelCount || "unknown"} channels at ${settings.sampleRate || "unknown"} Hz; need 4 channels at 48 kHz. Check the diagnostic firmware and Windows device format.`);
+        }
+        context = new AudioContext({ sampleRate: 48000 });
+        if (context.sampleRate !== 48000) throw new Error(`AudioContext opened at ${context.sampleRate} Hz instead of 48 kHz.`);
+        await context.resume();
+        source = context.createMediaStreamSource(stream);
+        processor = context.createScriptProcessor(1024, 4, 4);
+        mute = context.createGain(); mute.gain.value = 0;
+        const parts = [[], [], [], []]; let captureStarted = 0, captureError = null;
+        processor.onaudioprocess = (event) => {
+          if (!captureStarted) captureStarted = performance.now();
+          if (event.inputBuffer.numberOfChannels !== 4) { captureError = `Browser delivered ${event.inputBuffer.numberOfChannels} channel(s), not 4.`; return; }
+          for (let channel = 0; channel < 4; channel++) parts[channel].push(new Float32Array(event.inputBuffer.getChannelData(channel)));
+        };
+        source.connect(processor); processor.connect(mute); mute.connect(context.destination);
+        output.textContent = `Recording four synchronized USB channels for the ${role} scene. Keep the other speaker silent. A quiet baseline and two swept tones will play; ADC 0–2 are microphones and ADC 3 is Meerya’s speaker reference.`;
+        const selectedOutput = selectedOptionLabel(outputSelect);
+        appendLog(`ARRAY CALIBRATION start: ${JSON.stringify({ role, microphone: selectedOptionLabel(els.meeryaInputSelect), output: selectedOutput, sampleRate: settings.sampleRate, channels: settings.channelCount, otherSpeakerMustBeSilent: true })}\n`);
+        await delay(1200);
+        const sweepSeconds = 2, gapSeconds = 0.5, sampleRate = 48000;
+        const sweepFrames = sampleRate * sweepSeconds, gapFrames = sampleRate * gapSeconds;
+        const stimulus = new Float32Array(sweepFrames * 2 + gapFrames);
+        for (let i = 0; i < sweepFrames; i++) {
+          const t = i / sampleRate, duration = sweepSeconds;
+          const phase = 2 * Math.PI * (250 * duration / Math.log(7000 / 250)) * (Math.pow(7000 / 250, t / duration) - 1);
+          const ramp = Math.min(1, t / 0.03, (duration - t) / 0.03);
+          const sample = 0.10 * Math.max(0, ramp) * Math.sin(phase);
+          stimulus[i] = sample;
+          stimulus[sweepFrames + gapFrames + i] = sample;
+        }
+        const playback = await playWavToDevice(wavBlobFromPcm(stimulus, sampleRate), outputSelect.value);
+        await delay(500);
+        processor.onaudioprocess = null; source.disconnect(); processor.disconnect(); mute.disconnect();
+        if (captureError) throw new Error(captureError);
+        const channels = parts.map((chunks) => {
+          const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0), joined = new Float32Array(total);
+          let offset = 0; for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.length; }
+          return joined;
+        });
+        const stimulusStartFrame = Math.max(0, Math.round((playback.playbackStartMs - captureStarted) * sampleRate / 1000));
+        const stimulusEndFrame = Math.min(channels[0].length, Math.round((playback.playbackEndMs - captureStarted) * sampleRate / 1000));
+        const rms = (data, from, to) => {
+          let power = 0; const end = Math.min(to, data.length), start = Math.min(from, end);
+          for (let i = start; i < end; i++) power += data[i] * data[i];
+          return Math.sqrt(power / Math.max(1, end - start));
+        };
+        const dbfs = (value) => (20 * Math.log10(Math.max(value, 1e-9))).toFixed(1);
+        const measurements = channels.map((data, channel) => ({
+          channel: channel === 3 ? "ADC3 reference" : `ADC${channel} mic`,
+          frames: data.length,
+          quietRmsDbfs: dbfs(rms(data, 0, stimulusStartFrame)),
+          sweepRmsDbfs: dbfs(rms(data, stimulusStartFrame, stimulusEndFrame)),
+        }));
+        const blob = makeInterleavedWav(channels, sampleRate), url = URL.createObjectURL(blob);
+        const link = document.createElement("a"); link.href = url; link.download = `${filenamePrefix}-${new Date().toISOString().replaceAll(":", "-")}.wav`;
+        link.textContent = `Download synchronized 4-channel WAV (${(blob.size / 1024).toFixed(0)} KiB)`;
+        output.replaceChildren(document.createTextNode(`${role} capture complete. The file contains ADC0, ADC1, ADC2, ADC3-reference in that order; no beamforming or AEC was applied. `), link);
+        appendLog(`ARRAY CALIBRATION capture: ${JSON.stringify({ role, device: settings, output: selectedOutput, stimulus: "quiet baseline, then two identical 250–7000 Hz sweeps separated by 500 ms", playbackStartMs: playback.playbackStartMs, playbackEndMs: playback.playbackEndMs, measurements })}\n`);
+        const summary = document.createElement("pre"); summary.textContent = JSON.stringify(measurements, null, 2); output.append(document.createElement("br"), summary);
+      } catch (error) { output.textContent = `Four-channel ${role} capture: ${error.message}`; }
+      finally {
+        processor && (processor.onaudioprocess = null); source?.disconnect(); processor?.disconnect(); mute?.disconnect();
+        stream?.getTracks().forEach((track) => track.stop()); await context?.close(); buttons.forEach(button => button.disabled = false);
+      }
+    }
+    els.rawArrayCaptureBtn.addEventListener("click", () => recordRawArray({
+      outputSelect: els.hostOutputSelect,
+      role: "local patient-speaker target",
+      filenamePrefix: "meerya-patient-target-4ch",
+    }).catch(handleError));
+    els.rawArrayInterfererBtn.addEventListener("click", () => recordRawArray({
+      outputSelect: els.meeryaOutputSelect,
+      role: "Meerya-speaker interferer",
+      filenamePrefix: "meerya-speaker-interferer-4ch",
+    }).catch(handleError));
 
     async function resumeInstalledMicTest(port = null) {
       if (!state.pendingMicTestElf || state.micAutoStarting || state.micDiagBusy) return;
@@ -2265,84 +2456,15 @@
       };
     }
 
-    function suggestVolumeAdjustment(report) {
-      const dialog = document.getElementById("volumeAdviceDialog");
-      const overloaded = report.baselineDbfs > -15 || report.baselineClippedRatio > 0.01 || report.clippedRatio > 0.01;
-      const guidance = overloaded
-        ? "The recording is overloaded or the room baseline is too high. Lower the computer microphone input level or microphone boost in system Sound settings, move to a quieter spot, and keep the microphone at a fixed distance. Retry before raising speaker volume."
-        : report.noiseLiftDb < 6 || report.stimulusMatch < 0.6
-          ? "The test could not distinguish the speaker tone reliably. In system Sound settings, select Meerya as the output, check mute and system/app volume, and raise speaker volume gradually if needed. Check microphone placement and retry in a quiet room. This result alone does not prove the speaker is too quiet."
-          : "The recorded level did not follow the two test levels as expected. Check system Sound settings for audio enhancements, automatic microphone gain, or communications volume reduction. Keep microphone placement fixed and retry.";
-      report.suggestion = overloaded ? "check-microphone-input" : report.noiseLiftDb < 6 || report.stimulusMatch < 0.6 ? "check-speaker-volume-and-test-setup" : "check-audio-processing";
-      document.getElementById("volumeAdviceText").textContent = guidance;
-      document.getElementById("volumeAdviceEvidence").textContent = `Baseline ${report.baselineDbfs.toFixed(1)} dBFS; recording clipped ${(100 * (report.clippedRatio || report.baselineClippedRatio || 0)).toFixed(1)}%. The browser cannot read or change system volume.`;
-      if (!dialog.open) dialog.showModal();
+    function addLowMicrophoneGuidance(column, hasAudibleSignal) {
+      if (hasAudibleSignal) return;
+      addAudioResult(
+        column,
+        "Check microphone volume",
+        "Windows: Settings › System › Sound › Input › Meerya. Make sure the device is not muted and raise Input volume, then run the test again.",
+        false,
+      );
     }
-
-    async function runSpeakerVolumeTest() {
-      const button = document.getElementById("speakerVolumeBtn");
-      const output = document.getElementById("speakerVolumeResult");
-      if (state.audioTestBusy || state.micDiagBusy || state.firmwareBusy) throw new Error("Wait for the current test or update to finish.");
-      state.audioTestBusy = true; button.disabled = true;
-      state.speakerVolumeReport = { status: "running" };
-      setAudioPanelState("running"); setAudioTestState("Testing speaker volume");
-      try {
-        await refreshAudioDevices();
-        const mic = selectedOptionLabel(els.hostInputSelect);
-        const speaker = selectedOptionLabel(els.meeryaOutputSelect);
-        if (!els.hostInputSelect.value || /meerya/i.test(mic)) throw new Error("Select a computer microphone, not Meerya, for the acoustic measurement.");
-        if (!els.meeryaOutputSelect.value || !/meerya/i.test(speaker)) throw new Error("Select the Meerya speaker.");
-        output.textContent = "Measuring room baseline; please stay quiet…";
-        const baselineCapture = await capturePcmFromDevice(els.hostInputSelect.value, 4200);
-        if (baselineCapture.pcm.length < baselineCapture.sampleRate) throw new Error("Microphone capture was too short. Check microphone access and retry.");
-        const baseline = analyzePcm(baselineCapture.pcm);
-        if (dbfs(baseline.rms) > -15 || baseline.clippedRatio > 0.01) {
-          state.speakerVolumeReport = {status: "review", reason: "invalid-baseline", microphone: mic, speaker,
-            baselineDbfs: dbfs(baseline.rms), baselineClippedRatio: baseline.clippedRatio,
-            calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false};
-          output.textContent = "Recording baseline too high for a reliable volume test. Adjust microphone input or room noise and retry.";
-          setAudioPanelState("fail"); setAudioTestState("Speaker volume needs review");
-          suggestVolumeAdjustment(state.speakerVolumeReport);
-          appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
-          return;
-        }
-        const measurements = [];
-        for (const gain of [0.12, 0.24]) {
-          output.textContent = `Playing speaker stimulus at ${gain === 0.12 ? "lower" : "higher"} level…`;
-          measurements.push(await runAudioPathTest({ label: `Speaker volume gain ${gain}`, column: "out", outputSelect: els.meeryaOutputSelect, inputSelect: els.hostInputSelect, clear: measurements.length === 0, playbackGain: gain }));
-          await delay(1000);
-        }
-        const [low, high] = measurements;
-        const noiseLiftDb = dbfs(high.stats.rms) - dbfs(baseline.rms);
-        const levelIncreaseDb = dbfs(high.stats.rms) - dbfs(low.stats.rms);
-        const signalDetected = high.quality.pass && noiseLiftDb >= 6;
-        const levelTracks = levelIncreaseDb >= 3 && levelIncreaseDb <= 9;
-        state.speakerVolumeReport = {
-          status: signalDetected && levelTracks ? "relative-response-pass" : "review",
-          calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false,
-          microphone: mic, speaker, gains: [0.12, 0.24],
-          baselineClippedRatio: baseline.clippedRatio, baselineDbfs: dbfs(baseline.rms), lowDbfs: dbfs(low.stats.rms), highDbfs: dbfs(high.stats.rms),
-          noiseLiftDb, levelIncreaseDb, stimulusMatch: high.waveform.score,
-          clippedRatio: high.stats.clippedRatio,
-        };
-        output.textContent = `${signalDetected && levelTracks ? "Relative speaker response detected" : "Speaker volume needs review"}: baseline ${dbfs(baseline.rms).toFixed(1)} dBFS; low ${dbfs(low.stats.rms).toFixed(1)} dBFS; high ${dbfs(high.stats.rms).toFixed(1)} dBFS; above room noise ${noiseLiftDb.toFixed(1)} dB; level increase ${levelIncreaseDb.toFixed(1)} dB (expected about 6 dB). Windows/app volume and firmware gain are not readable by this browser test. This does not certify room loudness; keep mic placement fixed when comparing laptops.`;
-        setAudioPanelState(state.speakerVolumeReport.status === "review" ? "fail" : "pass");
-        setAudioTestState(state.speakerVolumeReport.status === "review" ? "Speaker volume needs review" : "Relative speaker response passed");
-        if (state.speakerVolumeReport.status === "review") suggestVolumeAdjustment(state.speakerVolumeReport);
-        appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
-      } catch (error) {
-        state.speakerVolumeReport = {status: "error", error: error.message};
-        setAudioPanelState("fail"); setAudioTestState("Speaker volume test error");
-        output.textContent = "Speaker volume test: " + error.message;
-        throw error;
-      } finally { state.audioTestBusy = false; button.disabled = false; }
-    }
-    document.getElementById("volumeAdviceClose").addEventListener("click", () => document.getElementById("volumeAdviceDialog").close());
-    document.getElementById("volumeAdviceRetry").addEventListener("click", () => {
-      document.getElementById("volumeAdviceDialog").close();
-      runSpeakerVolumeTest().catch(handleError);
-    });
-    document.getElementById("speakerVolumeBtn").addEventListener("click", () => runSpeakerVolumeTest().catch(handleError));
 
     async function runAudioPathTest({
       label,
@@ -2382,6 +2504,7 @@
       const quality = audioCapturePass(stats, waveform);
       addAudioResult(column, "RMS", `${rmsDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
       addAudioResult(column, "Peak", `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
+      addLowMicrophoneGuidance(column, quality.hasAudibleSignal);
       addAudioResult(column, "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
       addAudioResult(column, "Zero crossing", stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
       addAudioResult(
@@ -2474,13 +2597,7 @@
       return { pass, corePass: pass, halfDuplex: true, farStats, stats, recording, capturePcm: capture.pcm, sampleRate: capture.sampleRate };
     }
 
-    async function runAudioDuplexTest(options = {}) {
-      if (state.audioTestBusy || state.micDiagBusy || state.firmwareBusy) return;
-      state.audioTestBusy = true;
-      try { return await runAudioDuplexTestImpl(options); }
-      finally { state.audioTestBusy = false; }
-    }
-    async function runAudioDuplexTestImpl({ clear = true, readiness = null } = {}) {
+    async function runAudioDuplexTest({ clear = true, readiness = null } = {}) {
       if (expectedAudio()?.halfDuplexEchoSuppression) return runAudioHalfDuplexTest({ clear });
       readiness ??= await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
@@ -2527,6 +2644,7 @@
       addAudioResult("duplex", "Computer out stimulus B", "soft C-major chime", true);
       addAudioResult("duplex", "Meerya out noise A", "continuous", true);
       addAudioResult("duplex", "Meerya mic RMS", `${dbfs(stats.rms).toFixed(1)} dBFS`, hasAudibleSignal);
+      addLowMicrophoneGuidance("duplex", hasAudibleSignal);
       addAudioResult("duplex", "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, isNotClipped);
       addAudioResult(
         "duplex",
@@ -2585,6 +2703,7 @@
         speechPass = speechAudible && speechLooksVoiced && speechClean;
         addAudioResult("duplex", "Computer speech B", "high-fidelity WAV phrase", true);
         addAudioResult("duplex", "Speech mic RMS", `${dbfs(speechStats.rms).toFixed(1)} dBFS`, speechAudible);
+        addLowMicrophoneGuidance("duplex", speechAudible);
         addAudioResult("duplex", "Speech clipping", `${(speechStats.clippedRatio * 100).toFixed(2)}%`, speechClean);
         addAudioResult("duplex", "Speech waveform", `${Math.round(speechWaveform.score * 100)}% (freq ${Math.round(speechWaveform.frequencyScore * 100)}%, lag ${speechWaveform.lagMs} ms)`, speechLooksVoiced);
         addAudioResult("duplex", "Speech dominance", `${speechDominanceDb.toFixed(1)} dB over rumble/hiss`, speechLooksVoiced);
@@ -2627,6 +2746,43 @@
         capturePcm: capture.pcm,
         sampleRate: capture.sampleRate,
       };
+    }
+
+    async function runMeeryaStandaloneTest() {
+      const originalLabel = els.runMeeryaTestBtn.textContent;
+      state.micDiagnostics = {status: "not-run", reason: "Audio test has not completed"};
+      els.runMeeryaTestBtn.disabled = true;
+      els.runMeeryaTestBtn.textContent = "Testing Meerya…";
+      setStatus("Testing Meerya");
+      try {
+        const readiness = await refreshAudioDevices();
+        if (!canRunFullAudioSuite(readiness)) {
+          throw new Error(audioReadinessLabel(readiness));
+        }
+
+        const result = await runAudioDuplexTest({ clear: true, readiness });
+        let adcPass = null;
+        if (state.cdc) {
+          adcPass = await runAllMicChannels() === true;
+        } else {
+          state.micDiagnostics = {status: "not-run", reason: "CDC diagnostics not connected"};
+          appendLog("Three-microphone raw-channel test skipped: optional CDC diagnostics are not connected.\n");
+        }
+        const pass = result.pass && adcPass !== false;
+        if (!pass) {
+          setAudioPanelState("fail");
+          setAudioTestState(result.pass ? "Microphone channels need review" : "Audio needs review");
+        }
+        setStatus(pass ? (adcPass === null ? "Audio passed; ADC not checked" : "Meerya passed") : "Meerya needs review", pass ? "done" : "error");
+        return {...result, pass, microphoneDiagnostics: state.micDiagnostics};
+      } catch (error) {
+        setAudioPanelState("fail");
+        setAudioTestState("Test could not run: " + error.message);
+        throw error;
+      } finally {
+        els.runMeeryaTestBtn.disabled = false;
+        els.runMeeryaTestBtn.textContent = originalLabel;
+      }
     }
 
     async function waitForMeeryaAudioDevices(timeoutMs = 30000) {
@@ -2864,7 +3020,6 @@
           }
           state.cdc = candidate;
           state.cdcInfo = info;
-          showRunningFirmware(info);
           state.connected = true;
           updateFlashControls();
           setStatus("CDC updater detected", "ready");
@@ -2899,6 +3054,68 @@
       setStatus(chipName, "ready");
       appendLog(`Connected: ${chipName}\n`);
       setProgress(0, "Ready to flash.");
+    }
+
+    async function connectTestDiagnostics() {
+      if (!("serial" in navigator)) {
+        throw new Error("Microphone diagnostics require Chrome or Edge with Web Serial.");
+      }
+      if (state.cdc) {
+        return;
+      }
+
+      els.testSerialBtn.disabled = true;
+      els.testSerialState.textContent = "Choose Meerya Serial Console";
+      let port = null;
+      let candidate = null;
+      try {
+        port = await navigator.serial.requestPort();
+        const identity = port.getInfo();
+        const isRunningMeerya = identity.usbVendorId === 0x303a
+          && ![0x1001, 0x0009].includes(identity.usbProductId);
+        if (!isRunningMeerya) {
+          throw new Error("Select the running Meerya Serial Console, not the ESP32-S3 ROM bootloader.");
+        }
+
+        candidate = new CDCOTA(port, line => appendLog(line + "\n"));
+        await candidate.open();
+        const info = await candidate.info();
+        if (info.active !== "0") {
+          throw new Error("Meerya is already busy with a firmware update.");
+        }
+
+        state.port = port;
+        state.cdc = candidate;
+        state.cdcInfo = info;
+        state.connected = true;
+        els.testSerialState.textContent = "Microphone diagnostics connected";
+        els.testSerialDisconnectBtn.disabled = false;
+        setStatus("Diagnostics connected", "ready");
+        appendLog("Test page: Meerya CDC microphone diagnostics connected.\n");
+      } catch (error) {
+        await candidate?.close().catch(() => {});
+        state.port = null;
+        state.cdc = null;
+        state.cdcInfo = null;
+        state.connected = false;
+        els.testSerialState.textContent = "Serial diagnostics not connected";
+        throw error;
+      } finally {
+        els.testSerialBtn.disabled = Boolean(state.cdc);
+      }
+    }
+
+    async function disconnectTestDiagnostics() {
+      await state.cdc?.close();
+      state.port = null;
+      state.cdc = null;
+      state.cdcInfo = null;
+      state.connected = false;
+      els.testSerialBtn.disabled = false;
+      els.testSerialDisconnectBtn.disabled = true;
+      els.testSerialState.textContent = "Serial diagnostics optional";
+      setStatus("Ready to test", "ready");
+      appendLog("Test page: Meerya CDC microphone diagnostics disconnected.\n");
     }
 
     async function loadFirmwareFiles(target) {
@@ -3166,12 +3383,6 @@
     }
 
     async function flash() {
-      if (state.audioTestBusy || state.micDiagBusy) throw new Error("Wait for the audio test to finish before flashing.");
-      state.firmwareBusy = true;
-      try { return await flashImpl(); }
-      finally { state.firmwareBusy = false; }
-    }
-    async function flashImpl() {
       if (state.micDiagBusy) throw new Error("Wait for the microphone channel test to finish.");
       if (state.cdc) {
         els.flashBtn.disabled = true;
@@ -3195,8 +3406,7 @@
           await state.cdc.send("reboot");
           await state.cdc.close();
           state.cdc = null;
-          const runningInfo = await confirmBoot(state.port, {elf: image.elf, beforeElf: before.elf, beforeUptime: Number(before.uptime_ms)}, line => appendLog(line + "\n"));
-          showRunningFirmware(runningInfo);
+          await confirmBoot(state.port, {elf: image.elf, beforeElf: before.elf, beforeUptime: Number(before.uptime_ms)}, line => appendLog(line + "\n"));
           appendLog("CDC reboot confirmed: selected firmware identity is running.\n");
           setStatus("Testing", "ready");
           await runPostFlashTest(state.target);
@@ -3330,6 +3540,9 @@
       playbackGain: 0.12,
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
+    els.runMeeryaTestBtn.addEventListener("click", () => runMeeryaStandaloneTest().catch(handleError));
+    els.testSerialBtn.addEventListener("click", () => connectTestDiagnostics().catch(handleError));
+    els.testSerialDisconnectBtn.addEventListener("click", () => disconnectTestDiagnostics().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
     els.nativeStopBtn.addEventListener("click", () => window.MeeryaNative?.stopNearbyScan());
     els.nativeInvalidateBtn.addEventListener("click", () => window.MeeryaNative?.invalidateNearbySession());
@@ -3342,19 +3555,26 @@
     window.meeryaInstallerAudio = {
       refreshDevices: refreshAudioDevices,
       runDuplexTest: () => runAudioDuplexTest({ clear: true }),
-      runSpeakerVolumeTest,
       report: collectAudioTestReport,
     };
 
     loadManifest()
       .then(() => {
-        autoPopulateAudioDevices();
-        if (!("serial" in navigator)) {
-          setStatus("Web Serial unavailable");
-          setProgress(0, "Open this page in Chrome or Edge to flash firmware.");
+        if (!TEST_MODE) {
+          autoPopulateAudioDevices();
         } else {
-          setStatus("Ready", "ready");
-          setProgress(0, "Choose Connect to select the ESP32-S3 serial port.");
+          setAudioTestState("Ready");
+        }
+        if (!("serial" in navigator)) {
+          setStatus(TEST_MODE ? "Ready to test" : "Web Serial unavailable", "ready");
+          setProgress(0, TEST_MODE
+            ? "Audio tests are available. Raw microphone diagnostics require Chrome or Edge with Web Serial."
+            : "Open this page in Chrome or Edge to flash firmware.");
+        } else {
+          setStatus(TEST_MODE ? "Ready to test" : "Ready", "ready");
+          setProgress(0, TEST_MODE
+            ? "Choose Run Meerya test. Connect microphone diagnostics only when raw ADC 0–2 results are needed."
+            : "Choose Connect to select the ESP32-S3 serial port.");
         }
       })
       .catch(handleError);

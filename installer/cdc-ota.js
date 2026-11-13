@@ -60,13 +60,13 @@ export class CDCOTA {
         while ((end = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, end).replace(/^[>\s]+/, "").trim();
           buffer = buffer.slice(end + 1);
-          if (!["OTA ", "MICDIAG ", "live-stats:", "cpu-utilization:", "usb-audio-", "speaker-counters:", "speaker-dcd:"].some(prefix => line.startsWith(prefix))) continue;
+          if (!line.startsWith("OTA ")) continue;
           // Data commands can be echoed by the console; never log firmware chunks.
           if (!line.startsWith("OTA ACK ")) this.log(line);
           const pending = this.waiter;
           if (!pending) continue;
           try {
-            if (line.startsWith("OTA ERR ") || line.startsWith("MICDIAG ERR ")) throw new Error(line);
+            if (line.startsWith("OTA ERR ")) throw new Error(line);
             if (pending.accept(line)) pending.finish(null, line);
           } catch (error) { pending.finish(error); }
         }
@@ -165,21 +165,12 @@ export class CDCOTA {
   async close() {
     this.closing = true;
     this.waiter?.finish(new Error("Serial connection closed."));
-    // Chromium can leave serial cleanup promises pending after native USB
-    // re-enumerates. Bound cleanup so boot verification can reconnect.
-    const cleanup = async operation => {
-      let timer;
-      try {
-        await Promise.race([operation(), new Promise(resolve => { timer = setTimeout(resolve, 1500); })]);
-      } catch { /* Already disconnected. */ }
-      finally { clearTimeout(timer); }
-    };
-    await cleanup(() => this.reader?.cancel());
-    await cleanup(() => this.readTask);
-    await cleanup(() => this.writer?.abort());
+    try { await this.reader?.cancel(); } catch { /* Already disconnected. */ }
+    await this.readTask;
+    try { await this.writer?.abort(); } catch { /* Already disconnected. */ }
     try { this.writer?.releaseLock(); } catch { /* Already released. */ }
-    await cleanup(() => this.port.setSignals({ dataTerminalReady: false, requestToSend: false }));
-    await cleanup(() => this.port.close());
+    try { await this.port.setSignals({ dataTerminalReady: false, requestToSend: false }); } catch { /* Already disconnected. */ }
+    try { await this.port.close(); } catch { /* Already disconnected. */ }
     this.writer = null;
     this.reader = null;
     this.closed = true;
@@ -191,22 +182,10 @@ export async function confirmBoot(port, expected, log) {
   await pause(2000);
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
-    // Refresh Chromium's port handle after native USB re-enumeration. Only
-    // read a replacement when exactly one previously permitted matching port exists.
-    const identity = port.getInfo();
-    const ports = await navigator.serial.getPorts();
-    const matching = ports.filter(p => {
-      const id = p.getInfo();
-      return id.usbVendorId === identity.usbVendorId && id.usbProductId === identity.usbProductId;
-    });
-    const candidate = matching.length === 1 ? matching[0] : port;
-    const check = new CDCOTA(candidate, log);
+    const check = new CDCOTA(port, log);
     try {
-      let timer;
-      const info = await Promise.race([
-        (async () => { await check.open(); return check.info(); })(),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("USB reconnect timed out.")), 6000); })
-      ]).finally(() => clearTimeout(timer));
+      await check.open();
+      const info = await check.info();
       if (info.elf.toLowerCase() === expected.elf &&
           (info.elf.toLowerCase() !== expected.beforeElf || Number(info.uptime_ms) < expected.beforeUptime)) {
         return info;
