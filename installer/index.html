@@ -1021,6 +1021,13 @@
     </section>
   </main>
 
+  <dialog id="volumeAdviceDialog" aria-labelledby="volumeAdviceTitle" style="max-width:34rem;padding:1.5rem;border-radius:12px;color:#eee;background:#20242c;border:1px solid #768294;">
+    <h2 id="volumeAdviceTitle">Check audio settings before retrying</h2>
+    <p id="volumeAdviceText"></p>
+    <p id="volumeAdviceEvidence"></p>
+    <button id="volumeAdviceClose" type="button">Close</button>
+    <button id="volumeAdviceRetry" type="button">Retry speaker volume test</button>
+  </dialog>
   <script type="module">
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
     import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261109-reconnect";
@@ -2258,6 +2265,20 @@
       };
     }
 
+    function suggestVolumeAdjustment(report) {
+      const dialog = document.getElementById("volumeAdviceDialog");
+      const overloaded = report.baselineDbfs > -15 || report.baselineClippedRatio > 0.01 || report.clippedRatio > 0.01;
+      const guidance = overloaded
+        ? "The recording is overloaded or the room baseline is too high. Lower the computer microphone input level or microphone boost in system Sound settings, move to a quieter spot, and keep the microphone at a fixed distance. Retry before raising speaker volume."
+        : report.noiseLiftDb < 6 || report.stimulusMatch < 0.6
+          ? "The test could not distinguish the speaker tone reliably. In system Sound settings, select Meerya as the output, check mute and system/app volume, and raise speaker volume gradually if needed. Check microphone placement and retry in a quiet room. This result alone does not prove the speaker is too quiet."
+          : "The recorded level did not follow the two test levels as expected. Check system Sound settings for audio enhancements, automatic microphone gain, or communications volume reduction. Keep microphone placement fixed and retry.";
+      report.suggestion = overloaded ? "check-microphone-input" : report.noiseLiftDb < 6 || report.stimulusMatch < 0.6 ? "check-speaker-volume-and-test-setup" : "check-audio-processing";
+      document.getElementById("volumeAdviceText").textContent = guidance;
+      document.getElementById("volumeAdviceEvidence").textContent = `Baseline ${report.baselineDbfs.toFixed(1)} dBFS; recording clipped ${(100 * (report.clippedRatio || report.baselineClippedRatio || 0)).toFixed(1)}%. The browser cannot read or change system volume.`;
+      if (!dialog.open) dialog.showModal();
+    }
+
     async function runSpeakerVolumeTest() {
       const button = document.getElementById("speakerVolumeBtn");
       const output = document.getElementById("speakerVolumeResult");
@@ -2273,6 +2294,15 @@
         output.textContent = "Measuring room baseline; please stay quiet…";
         const baselineCapture = await capturePcmFromDevice(els.hostInputSelect.value, 4200);
         const baseline = analyzePcm(baselineCapture.pcm);
+        if (dbfs(baseline.rms) > -15 || baseline.clippedRatio > 0.01) {
+          state.speakerVolumeReport = {status: "review", reason: "invalid-baseline", microphone: mic, speaker,
+            baselineDbfs: dbfs(baseline.rms), baselineClippedRatio: baseline.clippedRatio,
+            calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false};
+          output.textContent = "Recording baseline too high for a reliable volume test. Adjust microphone input or room noise and retry.";
+          suggestVolumeAdjustment(state.speakerVolumeReport);
+          appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
+          return;
+        }
         const measurements = [];
         for (const gain of [0.12, 0.24]) {
           output.textContent = `Playing speaker stimulus at ${gain === 0.12 ? "lower" : "higher"} level…`;
@@ -2288,11 +2318,12 @@
           status: signalDetected && levelTracks ? "relative-response-pass" : "review",
           calibratedSpl: false, windowsVolumeVerified: false, firmwareGainVerified: false,
           microphone: mic, speaker, gains: [0.12, 0.24],
-          baselineDbfs: dbfs(baseline.rms), lowDbfs: dbfs(low.stats.rms), highDbfs: dbfs(high.stats.rms),
+          baselineClippedRatio: baseline.clippedRatio, baselineDbfs: dbfs(baseline.rms), lowDbfs: dbfs(low.stats.rms), highDbfs: dbfs(high.stats.rms),
           noiseLiftDb, levelIncreaseDb, stimulusMatch: high.waveform.score,
           clippedRatio: high.stats.clippedRatio,
         };
         output.textContent = `${signalDetected && levelTracks ? "Relative speaker response detected" : "Speaker volume needs review"}: baseline ${dbfs(baseline.rms).toFixed(1)} dBFS; low ${dbfs(low.stats.rms).toFixed(1)} dBFS; high ${dbfs(high.stats.rms).toFixed(1)} dBFS; above room noise ${noiseLiftDb.toFixed(1)} dB; level increase ${levelIncreaseDb.toFixed(1)} dB (expected about 6 dB). Windows/app volume and firmware gain are not readable by this browser test. This does not certify room loudness; keep mic placement fixed when comparing laptops.`;
+        if (state.speakerVolumeReport.status === "review") suggestVolumeAdjustment(state.speakerVolumeReport);
         appendLog("Speaker volume test: " + JSON.stringify(state.speakerVolumeReport) + "\n");
       } catch (error) {
         state.speakerVolumeReport = {status: "error", error: error.message};
@@ -2300,6 +2331,11 @@
         throw error;
       } finally { state.audioTestBusy = false; button.disabled = false; }
     }
+    document.getElementById("volumeAdviceClose").addEventListener("click", () => document.getElementById("volumeAdviceDialog").close());
+    document.getElementById("volumeAdviceRetry").addEventListener("click", () => {
+      document.getElementById("volumeAdviceDialog").close();
+      runSpeakerVolumeTest().catch(handleError);
+    });
     document.getElementById("speakerVolumeBtn").addEventListener("click", () => runSpeakerVolumeTest().catch(handleError));
 
     async function runAudioPathTest({
