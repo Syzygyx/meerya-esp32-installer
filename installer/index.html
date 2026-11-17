@@ -937,7 +937,7 @@
           </div>
           <details style="margin:16px 0" open>
             <summary><strong>Send your test results</strong></summary>
-            <p>After testing, download a PDF with the results and diagnostics. To send it to dan@syzygyx.com, choose Email report, then attach the downloaded PDF to the draft.</p>
+            <p>Choose Email report to open a draft to dan@syzygyx.com with the test results, device selections, and audio settings in the message body. A PDF also downloads with the diagnostic log; attaching it is optional.</p>
             <label for="reportLocation">Room or device name (optional)</label>
             <input id="reportLocation" type="text" maxlength="160" placeholder="e.g. Room 100">
             <label for="reportObservations">What did you hear or notice? (optional)</label>
@@ -945,6 +945,7 @@
             <div class="test-actions">
               <button id="downloadTestPdfBtn" type="button">Download PDF report</button>
               <button id="emailTestReportBtn" type="button">Email report to Dan</button>
+              <button id="copyTestEmailBtn" type="button">Copy email body</button>
               <span id="testReportState" role="status" class="muted">Run a test first. Incomplete and failed tests can also be reported.</span>
             </div>
             <p class="muted">The PDF contains test measurements, device labels, and audio diagnostics. Audio recordings are not included. Nothing is sent automatically.</p>
@@ -1112,7 +1113,7 @@
   </main>
 
   <script type="module">
-    import {createTestReportPdf, reportEmailLink} from "./test-report.js";
+    import {createTestReportPdf, reportEmailLink, reportEmailBody} from "./test-report.js";
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
     import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-audio-debug";
 
@@ -1739,7 +1740,7 @@
       };
     }
 
-    function exportTestReport(email = false) {
+    function buildTestReport() {
       const report = collectAudioTestReport();
       const now = new Date();
       report.generatedAt = now.toISOString();
@@ -1747,6 +1748,8 @@
       report.location = document.getElementById("reportLocation").value.trim();
       report.observations = document.getElementById("reportObservations").value.trim();
       report.browser = navigator.userAgent;
+      report.captureSettings = state.captureSettings || null;
+      report.expectedAudio = expectedAudio();
       report.page = location.origin + location.pathname;
       report.firmware = {
         target: state.target?.id,
@@ -1755,6 +1758,11 @@
       };
       // Include audio diagnostics, excluding Wi-Fi setup and unrelated serial logs.
       report.audioLog = report.log.split("\n").filter(line => /^(Audio |MICDIAG |Three-microphone |Microphone )/.test(line)).join("\n");
+      return report;
+    }
+
+    function exportTestReport(email = false) {
+      const report = buildTestReport();
       const filename = `meerya-test-${report.id}.pdf`;
       const url = URL.createObjectURL(createTestReportPdf(report));
       const link = document.createElement("a");
@@ -1762,7 +1770,7 @@
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       document.getElementById("testReportState").textContent = email
-        ? `PDF downloaded. Attach ${filename} to the email draft before sending. If no email app opens, send it to dan@syzygyx.com.`
+        ? "Email draft prepared with results and settings. PDF attachment is optional. If the draft is missing or incomplete, use Copy email body and paste it into an email to dan@syzygyx.com."
         : `PDF downloaded: ${filename}`;
       if (email) location.href = reportEmailLink(report, filename);
     }
@@ -2246,6 +2254,7 @@
     function logMicrophoneTrack(track, stage) {
       const settings = track.getSettings();
       const format = Object.fromEntries(["sampleRate", "channelCount", "sampleSize", "echoCancellation", "noiseSuppression", "autoGainControl", "latency", "volume"].filter(key => key in settings).map(key => [key, settings[key]]));
+      state.captureSettings = {...state.captureSettings, [track.label || "Microphone"]: {stage, format}};
       appendLog(`MIC DEBUG ${stage}: ${JSON.stringify({label: track.label, enabled: track.enabled, muted: track.muted, readyState: track.readyState, format})}\n`);
     }
 
@@ -3584,6 +3593,12 @@
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.runMeeryaTestBtn.addEventListener("click", () => runMeeryaStandaloneTest().catch(handleError));
+    document.getElementById("copyTestEmailBtn").addEventListener("click", async () => {
+      try {
+        await writeClipboardText(reportEmailBody(buildTestReport()));
+        document.getElementById("testReportState").textContent = "Results and settings copied. Paste into an email to dan@syzygyx.com.";
+      } catch (error) { handleError(error); }
+    });
     document.getElementById("downloadTestPdfBtn").addEventListener("click", () => { try { exportTestReport(); } catch (error) { handleError(error); } });
     document.getElementById("emailTestReportBtn").addEventListener("click", () => { try { exportTestReport(true); } catch (error) { handleError(error); } });
     els.testSerialBtn.addEventListener("click", () => connectTestDiagnostics().catch(handleError));

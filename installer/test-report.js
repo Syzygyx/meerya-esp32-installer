@@ -6,7 +6,7 @@ const ascii = value => String(value ?? "")
   .replace(/[…]/g, "...").replace(/[^\x20-\x7e\n]/g, "?");
 const literal = value => value.replace(/([\\()])/g, "\\$1");
 
-export function reportLines(report) {
+export function reportLines(report, {includeLog = true} = {}) {
   const lines = [];
   const add = (text = "") => {
     for (const paragraph of ascii(text).split("\n")) {
@@ -35,6 +35,9 @@ export function reportLines(report) {
   for (const [key, label] of Object.entries(report.selectedDevices || {})) add(`${key}: ${label || "Not selected"}`);
   add("The computer stimulus tests Meerya microphone pickup. Recording replay uses");
   add("the system default output; replay loudness is not a speaker level measurement.");
+  section("Audio settings");
+  add(`Browser capture (reported): ${report.captureSettings ? JSON.stringify(report.captureSettings, null, 2) : "Not captured"}`);
+  add(`Firmware audio profile (expected): ${report.expectedAudio ? JSON.stringify(report.expectedAudio, null, 2) : "Unknown"}`);
   section("Measurements");
   for (const [name, column] of Object.entries(report.columns || {})) {
     add(`${name.toUpperCase()} - ${column.state || "not run"}`);
@@ -49,8 +52,10 @@ export function reportLines(report) {
   section("Browser and page");
   add(report.browser || "Unknown");
   add(report.page || "Unknown");
-  section("Audio diagnostic log");
-  add(report.audioLog || "No audio log available");
+  if (includeLog) {
+    section("Audio diagnostic log");
+    add(report.audioLog || "No audio log available");
+  }
   add();
   add("This report records browser test results, not a calibrated acoustic measurement.");
   return lines;
@@ -85,8 +90,13 @@ export function createTestReportPdf(report) {
   return new Blob([pdf], {type: "application/pdf"});
 }
 
+export function reportEmailBody(report, filename) {
+  const body = reportLines(report, {includeLog: false}).join("\n");
+  return body + (filename ? `\n\nOptional PDF with audio log: ${filename}\nAttach the downloaded PDF if you want to include the diagnostic log.` : "");
+}
+
 export function reportEmailLink(report, filename) {
   const subject = `Meerya test ${report.id}: ${report.pass ? "passed" : "review requested"}`;
-  const body = `Meerya test report\n\nPlease attach the downloaded PDF: ${filename}\n\nTest: ${report.stateText}\nLocation / device: ${report.location || "Not provided"}\nObservations: ${report.observations || "None provided"}`;
+  const body = reportEmailBody(report, filename);
   return `mailto:${REPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
