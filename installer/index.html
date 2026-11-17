@@ -440,7 +440,8 @@
       background: color-mix(in srgb, var(--ok) 8%, var(--bg));
     }
 
-    .audio-test[data-state="fail"] {
+    .audio-test[data-state="fail"],
+    .audio-test[data-state="review"] {
       border-color: color-mix(in srgb, var(--warn) 75%, var(--line));
       background: color-mix(in srgb, var(--warn) 8%, var(--bg));
     }
@@ -921,9 +922,10 @@
         </div>
 
         <div class="audio-test" id="audioTestPanel">
+          <fieldset id="audioSuiteControls" style="border:0;padding:0;margin:0;min-width:0">
           <div class="test-only test-intro">
             <h2>Test Meerya</h2>
-            <p>Verify that Meerya appears as a USB microphone and speaker, then exercise its microphone pickup, speaker output, and simultaneous duplex audio. This page cannot install or update firmware.</p>
+            <p>Run all checks in order: microphone pickup, speaker output, duplex and speech, then microphone-channel diagnostics when connected. Select the computer speaker and microphone as well as both Meerya devices. Keep the computer microphone near Meerya for the speaker check. This page cannot install or update firmware.</p>
             <div class="test-actions">
               <button id="runMeeryaTestBtn" class="primary" type="button">Run Meerya test</button>
               <button id="testSerialBtn" type="button">Connect microphone diagnostics</button>
@@ -1001,6 +1003,8 @@
               <ul class="audio-test-results" id="audioDuplexResults"></ul>
             </section>
           </div>
+          <p id="audioSuiteSummary" role="status">The full test runs each check in sequence. Channel diagnostics require a serial connection.</p>
+          </fieldset>
         </div>
 
         <section class="test-only recorded-comparison" aria-labelledby="recordedComparisonTitle">
@@ -1246,9 +1250,9 @@
       els.bleBootloaderBtn.disabled = state.connected;
       // Running audio is compatible with CDC OTA; keep Connect available.
       els.eraseAll.disabled = !!state.cdc;
-      els.connectBtn.disabled = state.connected;
-      els.flashBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting;
-      els.disconnectBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting;
+      els.connectBtn.disabled = state.connected || !!state.audioSuiteRunning;
+      els.flashBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting || !!state.audioSuiteRunning;
+      els.disconnectBtn.disabled = !state.connected || !!state.micDiagBusy || !!state.micAutoStarting || !!state.audioSuiteRunning;
     }
 
     function resetQuickTest(stateText = "Not run", stateName = "idle") {
@@ -1399,6 +1403,10 @@
     }
 
     function clearAudioResults() {
+      if (!state.audioSuiteRunning) {
+        state.audioSuiteSteps = [];
+        document.getElementById("audioSuiteSummary").textContent = "Individual check selected; run the full test to check every audio path.";
+      }
       els.audioInResults.innerHTML = "";
       els.audioOutResults.innerHTML = "";
       els.audioDuplexResults.innerHTML = "";
@@ -1736,6 +1744,8 @@
           hostInput: selectedOptionLabel(els.hostInputSelect),
         },
         microphoneDiagnostics: state.micDiagnostics || { status: "not-run" },
+        suiteSteps: state.audioSuiteSteps || [],
+        suiteSummary: document.getElementById("audioSuiteSummary").textContent.trim(),
         log: els.terminal.textContent.slice(-12000),
       };
     }
@@ -1885,6 +1895,7 @@
     }
 
     async function autoPopulateAudioDevices() {
+      if (state.audioSuiteRunning) return;
       if (!navigator.mediaDevices?.enumerateDevices) {
         setAudioTestState("Audio devices unavailable");
         return;
@@ -2098,8 +2109,9 @@
         if (pass) state.pendingMicTestElf = null;
         return pass;
       } catch (error) {
-        state.micDiagnostics = {status: "error", error: error.message};
-        output.textContent = "Microphone channel test: " + error.message;
+        const timedOut = /timed?\s*out|timeout/i.test(error.message);
+        state.micDiagnostics = {status: timedOut ? "timeout" : "error", error: error.message};
+        output.textContent = `Microphone channel diagnostics ${timedOut ? "timed out" : "could not complete"}: ${error.message} Audio-path results are shown separately; this is not a measured microphone failure.`;
         appendLog(output.textContent + "\n");
         return false;
       }
@@ -2518,6 +2530,18 @@
       );
     }
 
+    async function captureDuringPlayback(inputId, durationMs, leadMs, play) {
+      // Settle both operations even if one fails, so the next suite step cannot
+      // overlap an old capture or leave a rejected capture promise unhandled.
+      const [capture, playback] = await Promise.allSettled([
+        capturePcmFromDevice(inputId, durationMs),
+        (async () => { await delay(leadMs); return play(); })(),
+      ]);
+      if (capture.status === "rejected") throw capture.reason;
+      if (playback.status === "rejected") throw playback.reason;
+      return capture.value;
+    }
+
     async function runAudioPathTest({
       label,
       column = "duplex",
@@ -2527,8 +2551,9 @@
       outputLabel = "output",
       inputLabel = "input",
       playbackGain = 1.0,
+      readiness = null,
     }) {
-      const readiness = await refreshAudioDevices();
+      readiness ??= await refreshAudioDevices();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running smoke tests.");
       }
@@ -2541,10 +2566,8 @@
       const { pcm, sampleRate } = generateTestPcm(48000, 2.8, playbackGain);
       const wav = wavBlobFromPcm(pcm, sampleRate);
       const countersBefore = await readFirmwareAudioRuntime();
-      const capturePromise = capturePcmFromDevice(inputSelect.value, 4200);
-      await delay(550);
-      await playWavToDevice(wav, outputSelect.value);
-      const capture = await capturePromise;
+      const capture = await captureDuringPlayback(inputSelect.value, 4200, 550,
+        () => playWavToDevice(wav, outputSelect.value));
       await delay(250);
       const countersAfter = await readFirmwareAudioRuntime();
       const counterSummary = formatCounterDeltas(countersBefore, countersAfter);
@@ -2671,13 +2694,10 @@
       const meeryaNoise = generateNoisePcm(48000, 3.0, 0.05);
       const computerWav = wavBlobFromPcm(computerStimulus.pcm, computerStimulus.sampleRate);
       const meeryaWav = wavBlobFromPcm(meeryaNoise.pcm, meeryaNoise.sampleRate);
-      const capturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
-      await delay(550);
-      await Promise.all([
+      const capture = await captureDuringPlayback(els.meeryaInputSelect.value, 4300, 550, () => Promise.all([
         playWavToDevice(computerWav, els.hostOutputSelect.value),
         playWavToDevice(meeryaWav, els.meeryaOutputSelect.value),
-      ]);
-      const capture = await capturePromise;
+      ]));
       const stats = analyzePcm(capture.pcm);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
       const computerWaveform = compareWaveforms(computerStimulus.pcm, capture.pcm, capture.sampleRate);
@@ -2720,19 +2740,17 @@
       addAudioPlaybackResult("duplex", "Play Meerya capture", recording);
       let speechPass = true;
       let speechAvailable = false;
+      let speechError = null;
 
       try {
         speechAvailable = true;
         const speechStimulus = await loadSpeechStimulus();
         const speechNoise = generateNoisePcm(48000, 4.2, 0.04);
         const speechNoiseWav = wavBlobFromPcm(speechNoise.pcm, speechNoise.sampleRate);
-        const speechCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 5000);
-        await delay(250);
-        await Promise.all([
+        const speechCapture = await captureDuringPlayback(els.meeryaInputSelect.value, 5000, 250, () => Promise.all([
           playWavToDevice(speechNoiseWav, els.meeryaOutputSelect.value),
           playWavToDevice(speechStimulus.wav, els.hostOutputSelect.value),
-        ]);
-        const speechCapture = await speechCapturePromise;
+        ]));
         const speechStats = analyzePcm(speechCapture.pcm);
         const speechRecording = wavBlobFromPcm(speechCapture.pcm, speechCapture.sampleRate);
         const speechWaveform = compareWaveforms(speechStimulus.pcm, speechCapture.pcm, speechCapture.sampleRate);
@@ -2775,18 +2793,22 @@
         appendLog(`Audio speech test: match=${Math.round(speechWaveform.score * 100)}% speechBand=${dbfs(speechBand).toFixed(1)}dBFS rumble=${dbfs(rumbleBand).toFixed(1)}dBFS hiss=${dbfs(hissBand).toFixed(1)}dBFS dominance=${speechDominanceDb.toFixed(1)}dB leak=${speechLeakDb.toFixed(1)}dBFS result=${speechPass ? "pass" : "check"}\n`);
       } catch (error) {
         speechAvailable = false;
+        speechError = error.message;
         speechPass = true;
         addAudioResult("duplex", "Computer speech B", `speech test skipped: ${error.message}`, null);
         appendLog(`Audio speech test skipped: ${error.message}\n`);
       }
-      const overallPass = pass && (!speechAvailable || speechPass);
-      setAudioColumnState("duplex", overallPass ? "pass" : "fail", overallPass ? "Passed" : "Check");
-      setAudioPanelState(overallPass ? "pass" : "fail");
-      setAudioTestState(overallPass ? "Passed" : speechAvailable && pass ? "Speech needs review" : "Audio weak/noisy");
+      const overallPass = pass && speechAvailable && speechPass;
+      const incomplete = pass && !speechAvailable;
+      setAudioColumnState("duplex", overallPass ? "pass" : incomplete ? "review" : "fail", overallPass ? "Passed" : incomplete ? "Speech not completed" : "Check");
+      setAudioPanelState(overallPass ? "pass" : incomplete ? "review" : "fail");
+      setAudioTestState(overallPass ? "Passed" : incomplete ? "Duplex passed; speech not completed" : speechAvailable && pass ? "Speech needs review" : "Audio weak/noisy");
       appendLog(`Audio duplex test: computerMatch=${Math.round(computerWaveform.score * 100)}% freq=${Math.round(computerWaveform.frequencyScore * 100)}% computerBand=${dbfs(computerMagnitude).toFixed(1)}dBFS meeryaNoiseLeak=${dbfs(meeryaLeakMagnitude).toFixed(1)}dBFS leakMargin=${leakageMarginDb.toFixed(1)}dB clipped=${(stats.clippedRatio * 100).toFixed(2)}% result=${pass ? "pass" : "fail"}\n`);
       return {
         pass: overallPass,
         corePass: pass,
+        speechAvailable,
+        speechError,
         stats,
         computerWaveform,
         computerMagnitude,
@@ -2801,39 +2823,105 @@
     }
 
     async function runMeeryaStandaloneTest() {
+      if (state.audioSuiteRunning) return;
       const originalLabel = els.runMeeryaTestBtn.textContent;
+      const controls = document.getElementById("audioSuiteControls");
+      const summary = document.getElementById("audioSuiteSummary");
+      state.audioSuiteRunning = true;
+      state.audioSuiteSteps = [];
+      state.captureSettings = null;
       state.micDiagnostics = {status: "not-run", reason: "Audio test has not completed"};
+      controls.disabled = true;
       els.runMeeryaTestBtn.disabled = true;
       els.runMeeryaTestBtn.textContent = "Testing Meerya…";
+      summary.textContent = "Preparing full audio test…";
+      updateFlashControls();
       setStatus("Testing Meerya");
       try {
+        clearAudioResults();
         const readiness = await refreshAudioDevices();
-        if (!canRunFullAudioSuite(readiness)) {
+        if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
           throw new Error(audioReadinessLabel(readiness));
         }
-
-        const result = await runAudioDuplexTest({ clear: true, readiness });
-        let adcPass = null;
+        const runStep = async (name, column, run) => {
+          const step = {name, status: "running"};
+          state.audioSuiteSteps.push(step);
+          els.runMeeryaTestBtn.textContent = `Testing ${state.audioSuiteSteps.length}/4…`;
+          summary.textContent = `Step ${state.audioSuiteSteps.length}/4: ${name}`;
+          try {
+            const result = await run();
+            step.status = result.pass ? "passed" : "failed";
+            if (result.speechAvailable === false) {
+              step.status = result.corePass === false ? "failed" : "incomplete";
+              step.error = `Speech check incomplete: ${result.speechError || "unavailable"}`;
+            }
+            return result;
+          } catch (error) {
+            step.status = "incomplete";
+            step.error = error.message;
+            setAudioColumnState(column, "review", "Not completed");
+            addAudioResult(column, name, `Not completed: ${error.message}`, null);
+            appendLog(`Audio suite ${name}: not completed: ${error.message}\n`);
+            return {pass: false};
+          }
+        };
+        await runStep("Microphone pickup", "in", () => {
+          if (!readiness.hasHostOutput) throw new Error("Select a computer speaker for the microphone pickup check.");
+          return runAudioPathTest({label: "Computer to Meerya mic", column: "in", clear: false, readiness,
+            outputSelect: els.hostOutputSelect, inputSelect: els.meeryaInputSelect, outputLabel: "computer out", inputLabel: "meerya in"});
+        });
+        await runStep("Speaker output", "out", () => {
+          if (!readiness.hasHostInput) throw new Error("Select a computer microphone for the speaker output check.");
+          return runAudioPathTest({label: "Meerya speaker to computer", column: "out", clear: false, readiness,
+            outputSelect: els.meeryaOutputSelect, inputSelect: els.hostInputSelect, outputLabel: "meerya out", inputLabel: "computer in", playbackGain: 0.12});
+        });
+        const result = await runStep("Duplex and speech", "duplex", () => {
+          if (!readiness.hasHostOutput) throw new Error("Select a computer speaker for the duplex check.");
+          return runAudioDuplexTest({ clear: false, readiness });
+        });
+        const audioSteps = [...state.audioSuiteSteps];
+        const audioPass = audioSteps.every(step => step.status === "passed");
+        summary.textContent = "Step 4/4: microphone-channel diagnostics";
+        els.runMeeryaTestBtn.textContent = "Testing 4/4…";
+        const diagnosticStep = {name: "Microphone-channel diagnostics", status: "not-run"};
+        state.audioSuiteSteps.push(diagnosticStep);
         if (state.cdc) {
-          adcPass = await runAllMicChannels() === true;
+          try {
+            const adcPass = await runAllMicChannels();
+            diagnosticStep.status = adcPass === true ? "passed"
+              : state.micDiagnostics.status === "review" ? "failed" : "incomplete";
+            diagnosticStep.error = state.micDiagnostics.error;
+          } catch (error) {
+            state.micDiagnostics = {status: "error", error: error.message};
+            diagnosticStep.status = "incomplete";
+            diagnosticStep.error = error.message;
+          }
         } else {
           state.micDiagnostics = {status: "not-run", reason: "CDC diagnostics not connected"};
+          diagnosticStep.error = "Connect microphone diagnostics to check individual channels.";
           appendLog("Three-microphone raw-channel test skipped: optional CDC diagnostics are not connected.\n");
         }
-        const pass = result.pass && adcPass !== false;
-        if (!pass) {
-          setAudioPanelState("fail");
-          setAudioTestState(result.pass ? "Microphone channels need review" : "Audio needs review");
-        }
-        setStatus(pass ? (adcPass === null ? "Audio passed; ADC not checked" : "Meerya passed") : "Meerya needs review", pass ? "done" : "error");
-        return {...result, pass, microphoneDiagnostics: state.micDiagnostics};
+        const measuredFailure = state.audioSuiteSteps.some(step => step.status === "failed");
+        const pass = audioPass && diagnosticStep.status === "passed";
+        const verdict = pass ? "Meerya passed"
+          : measuredFailure ? (audioSteps.some(step => step.status === "failed") ? "Audio checks need review" : "Audio passed; microphone channels need review")
+          : audioPass ? "Audio passed; channel diagnostics incomplete" : "Audio checks incomplete";
+        summary.textContent = state.audioSuiteSteps.map(step => `${step.name}: ${step.status}${step.error ? ` (${step.error})` : ""}`).join(" · ");
+        setAudioPanelState(pass ? "pass" : measuredFailure ? "fail" : "review");
+        setAudioTestState(verdict);
+        setStatus(verdict, pass ? "done" : measuredFailure ? "error" : "ready");
+        return {...result, pass, audioPass, steps: state.audioSuiteSteps, microphoneDiagnostics: state.micDiagnostics};
       } catch (error) {
-        setAudioPanelState("fail");
+        setAudioPanelState("review");
         setAudioTestState("Test could not run: " + error.message);
+        summary.textContent = "Test not completed: " + error.message;
         throw error;
       } finally {
+        state.audioSuiteRunning = false;
+        controls.disabled = false;
         els.runMeeryaTestBtn.disabled = false;
         els.runMeeryaTestBtn.textContent = originalLabel;
+        updateFlashControls();
       }
     }
 

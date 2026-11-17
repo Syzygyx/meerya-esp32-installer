@@ -26,9 +26,12 @@ export function reportLines(report, {includeLog = true} = {}) {
   add(`Generated: ${report.generatedAt}`);
   add(`Report ID: ${report.id}`);
   add(`Return to: ${REPORT_EMAIL}`);
-  add(`Overall: ${report.pass ? "PASS" : report.panelState === "fail" ? "NEEDS REVIEW" : "NOT COMPLETED"}`);
+  add(`Overall: ${report.pass ? "PASS" : report.panelState === "fail" ? "NEEDS REVIEW" : "INCOMPLETE"}`);
   add(`Test state: ${report.stateText}`);
   add(`Location / device: ${report.location || "Not provided"}`);
+  section("Check summary");
+  for (const step of report.suiteSteps || []) add(`${step.name}: ${step.status}${step.error ? ` - ${step.error}` : ""}`);
+  if (!report.suiteSteps?.length) add("No full-suite results recorded");
   section("User observations");
   add(report.observations || "None provided");
   section("Audio routing");
