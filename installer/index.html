@@ -935,6 +935,20 @@
             <strong>Audio Smoke Test</strong>
             <span id="audioTestState">Not run</span>
           </div>
+          <details style="margin:16px 0" open>
+            <summary><strong>Send your test results</strong></summary>
+            <p>After testing, download a PDF with the results and diagnostics. To send it to dan@syzygyx.com, choose Email report, then attach the downloaded PDF to the draft.</p>
+            <label for="reportLocation">Room or device name (optional)</label>
+            <input id="reportLocation" type="text" maxlength="160" placeholder="e.g. Room 100">
+            <label for="reportObservations">What did you hear or notice? (optional)</label>
+            <textarea id="reportObservations" rows="3" maxlength="3000" style="width:100%;box-sizing:border-box" placeholder="e.g. Test sound came from the computer; recording played through Meerya but was quiet."></textarea>
+            <div class="test-actions">
+              <button id="downloadTestPdfBtn" type="button">Download PDF report</button>
+              <button id="emailTestReportBtn" type="button">Email report to Dan</button>
+              <span id="testReportState" role="status" class="muted">Run a test first. Incomplete and failed tests can also be reported.</span>
+            </div>
+            <p class="muted">The PDF contains test measurements, device labels, and audio diagnostics. Audio recordings are not included. Nothing is sent automatically.</p>
+          </details>
           <div class="audio-test-grid">
             <div>
               <label for="hostOutputSelect">Patient-side speaker (local output)</label>
@@ -1098,6 +1112,7 @@
   </main>
 
   <script type="module">
+    import {createTestReportPdf, reportEmailLink} from "./test-report.js";
     import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.0/bundle.js";
     import { CDCOTA, inspectImage, confirmBoot } from "./cdc-ota.js?v=20261104-audio-debug";
 
@@ -1722,6 +1737,34 @@
         microphoneDiagnostics: state.micDiagnostics || { status: "not-run" },
         log: els.terminal.textContent.slice(-12000),
       };
+    }
+
+    function exportTestReport(email = false) {
+      const report = collectAudioTestReport();
+      const now = new Date();
+      report.generatedAt = now.toISOString();
+      report.id = now.toISOString().replace(/[:.]/g, "-");
+      report.location = document.getElementById("reportLocation").value.trim();
+      report.observations = document.getElementById("reportObservations").value.trim();
+      report.browser = navigator.userAgent;
+      report.page = location.origin + location.pathname;
+      report.firmware = {
+        target: state.target?.id,
+        manifestCommit: state.manifest?.gitHead,
+        running: state.cdcInfo,
+      };
+      // Include audio diagnostics, excluding Wi-Fi setup and unrelated serial logs.
+      report.audioLog = report.log.split("\n").filter(line => /^(Audio |MICDIAG |Three-microphone |Microphone )/.test(line)).join("\n");
+      const filename = `meerya-test-${report.id}.pdf`;
+      const url = URL.createObjectURL(createTestReportPdf(report));
+      const link = document.createElement("a");
+      link.href = url; link.download = filename;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      document.getElementById("testReportState").textContent = email
+        ? `PDF downloaded. Attach ${filename} to the email draft before sending. If no email app opens, send it to dan@syzygyx.com.`
+        : `PDF downloaded: ${filename}`;
+      if (email) location.href = reportEmailLink(report, filename);
     }
 
     function deviceLabel(device) {
@@ -3541,6 +3584,8 @@
     }).catch(handleError));
     els.audioDuplexBtn.addEventListener("click", () => runAudioDuplexTest().catch(handleError));
     els.runMeeryaTestBtn.addEventListener("click", () => runMeeryaStandaloneTest().catch(handleError));
+    document.getElementById("downloadTestPdfBtn").addEventListener("click", () => { try { exportTestReport(); } catch (error) { handleError(error); } });
+    document.getElementById("emailTestReportBtn").addEventListener("click", () => { try { exportTestReport(true); } catch (error) { handleError(error); } });
     els.testSerialBtn.addEventListener("click", () => connectTestDiagnostics().catch(handleError));
     els.testSerialDisconnectBtn.addEventListener("click", () => disconnectTestDiagnostics().catch(handleError));
     els.nativeScanBtn.addEventListener("click", () => window.MeeryaNative?.scanNearby());
