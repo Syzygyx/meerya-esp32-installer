@@ -2266,7 +2266,8 @@
     function logMicrophoneTrack(track, stage) {
       const settings = track.getSettings();
       const format = Object.fromEntries(["sampleRate", "channelCount", "sampleSize", "echoCancellation", "noiseSuppression", "autoGainControl", "latency", "volume"].filter(key => key in settings).map(key => [key, settings[key]]));
-      state.captureSettings = {...state.captureSettings, [track.label || "Microphone"]: {stage, format}};
+      const label = track.label || "Microphone";
+      state.captureSettings = {...state.captureSettings, [label]: {...state.captureSettings?.[label], stage, format}};
       appendLog(`MIC DEBUG ${stage}: ${JSON.stringify({label: track.label, enabled: track.enabled, muted: track.muted, readyState: track.readyState, format})}\n`);
     }
 
@@ -2278,15 +2279,39 @@
       } catch (error) { appendLog(`MIC DEBUG ${stage}: USB counters unavailable: ${error.message}\n`); }
     }
 
-    async function capturePcmFromDevice(inputDeviceId, durationMs) {
+    function filterCaptureBlock(input, sampleRate, history) {
+      // AC coupling removes capture-driver DC without changing stimulus volume.
+      const alpha = Math.exp(-2 * Math.PI * 20 / sampleRate);
+      const output = new Float32Array(input.length);
+      if (history.input === undefined) { history.input = input[0] || 0; history.output = 0; }
+      for (let i = 0; i < input.length; ++i) {
+        const value = alpha * (history.output + input[i] - history.input);
+        history.input = input[i]; history.output = value; output[i] = value;
+      }
+      return output;
+    }
+
+    function analyzeCapture(capture) {
+      const stats = analyzePcm(capture.pcm);
+      // A filtered recording must never conceal overload in the raw input.
+      stats.clippedRatio = Math.max(stats.clippedRatio, capture.rawStats?.clippedRatio || 0);
+      return stats;
+    }
+
+    async function capturePcmFromDevice(inputDeviceId, durationMs, onReady = () => {}) {
       const constraints = {audio: {deviceId: inputDeviceId ? {exact: inputDeviceId} : undefined, channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false}, video: false};
       let stream, context, source, processor;
       const chunks = [];
+      const filterHistory = {};
+      const raw = {frames: 0, clipped: 0, peak: 0, sum: 0};
+      const startup = {frames: 0, clipped: 0};
+      const warmupMs = 1500;
+      let phase = "warmup", track;
       let callbacks = 0, elapsedStart = performance.now();
       appendLog(`MIC DEBUG capture request: duration=${durationMs}ms, mono, browser AEC/NS/AGC requested off\n`);
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-        const track = stream.getAudioTracks()[0];
+        track = stream.getAudioTracks()[0];
         logMicrophoneTrack(track, "opened");
         track.onmute = () => logMicrophoneTrack(track, "mute event");
         track.onunmute = () => logMicrophoneTrack(track, "unmute event");
@@ -2296,16 +2321,35 @@
         appendLog(`MIC DEBUG AudioContext: state=${context.state}, rate=${context.sampleRate}Hz\n`);
         source = context.createMediaStreamSource(stream);
         processor = context.createScriptProcessor(4096, 1, 1);
-        processor.onaudioprocess = event => { callbacks++; chunks.push(new Float32Array(event.inputBuffer.getChannelData(0))); };
+        processor.onaudioprocess = event => {
+          if (phase === "stopped") return;
+          const input = event.inputBuffer.getChannelData(0);
+          const filtered = filterCaptureBlock(input, context.sampleRate, filterHistory);
+          if (phase === "warmup") {
+            startup.frames += input.length;
+            for (const sample of input) if (Math.abs(sample) > 0.98) startup.clipped++;
+            return;
+          }
+          callbacks++; chunks.push(filtered); raw.frames += input.length;
+          for (const sample of input) {
+            raw.sum += sample; raw.peak = Math.max(raw.peak, Math.abs(sample));
+            if (Math.abs(sample) > 0.98) raw.clipped++;
+          }
+        };
         source.connect(processor); processor.connect(context.destination);
         await logUsbMicCounters("capture active/start");
+        await delay(warmupMs);
+        phase = "measuring";
+        onReady();
         await delay(durationMs);
+        phase = "stopped";
         await logUsbMicCounters("capture active/end");
         logMicrophoneTrack(track, "before stop");
       } catch (error) {
         appendLog(`MIC DEBUG capture error: ${error.name}: ${error.message}\n`);
         throw error;
       } finally {
+        phase = "stopped";
         processor?.disconnect(); source?.disconnect();
         stream?.getTracks().forEach(track => track.stop());
         await context?.close();
@@ -2314,7 +2358,14 @@
       let offset = 0, nonzero = 0, sumSq = 0, peak = 0;
       for (const chunk of chunks) { pcm.set(chunk, offset); offset += chunk.length; for (const sample of chunk) { if (sample !== 0) nonzero++; sumSq += sample * sample; peak = Math.max(peak, Math.abs(sample)); } }
       appendLog(`MIC DEBUG captured: ${JSON.stringify({callbacks, frames: total, elapsedMs: Math.round(performance.now()-elapsedStart), nonzeroSamples: nonzero, zeroSamples: total-nonzero, rms: Math.sqrt(sumSq/Math.max(1,total)), peak, allZero: total > 0 && nonzero === 0, noFrames: total === 0})}\n`);
-      return {pcm, sampleRate: context?.sampleRate || 48000};
+      const rawStats = {peak: raw.peak, clippedRatio: raw.clipped / Math.max(1, raw.frames), mean: raw.sum / Math.max(1, raw.frames)};
+      const conditioning = {warmupMs, highPassHz: 20, rawStats, startupClippedRatio: startup.clipped / Math.max(1, startup.frames)};
+      if (track) {
+        const label = track.label || "Microphone";
+        state.captureSettings = {...state.captureSettings, [label]: {...state.captureSettings?.[label], conditioning}};
+      }
+      appendLog(`Audio capture setup: ${JSON.stringify(conditioning)}\n`);
+      return {pcm, sampleRate: context?.sampleRate || 48000, rawStats, conditioning};
     }
 
     function analyzePcm(pcm) {
@@ -2533,9 +2584,13 @@
     async function captureDuringPlayback(inputId, durationMs, leadMs, play) {
       // Settle both operations even if one fails, so the next suite step cannot
       // overlap an old capture or leave a rejected capture promise unhandled.
+      let ready, notReady;
+      const armed = new Promise((resolve, reject) => { ready = resolve; notReady = reject; });
+      const captureTask = capturePcmFromDevice(inputId, durationMs, ready);
+      captureTask.catch(notReady);
       const [capture, playback] = await Promise.allSettled([
-        capturePcmFromDevice(inputId, durationMs),
-        (async () => { await delay(leadMs); return play(); })(),
+        captureTask,
+        (async () => { await armed; await delay(leadMs); return play(); })(),
       ]);
       if (capture.status === "rejected") throw capture.reason;
       if (playback.status === "rejected") throw playback.reason;
@@ -2571,7 +2626,7 @@
       await delay(250);
       const countersAfter = await readFirmwareAudioRuntime();
       const counterSummary = formatCounterDeltas(countersBefore, countersAfter);
-      const stats = analyzePcm(capture.pcm);
+      const stats = analyzeCapture(capture);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
       const waveform = compareWaveforms(pcm, capture.pcm, capture.sampleRate);
       const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
@@ -2581,6 +2636,7 @@
       addAudioResult(column, "Peak", `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
       addLowMicrophoneGuidance(column, quality.hasAudibleSignal);
       addAudioResult(column, "Clipping", `${(stats.clippedRatio * 100).toFixed(2)}%`, quality.isNotClipped);
+      addAudioResult(column, "Capture setup", "1.5 s settling; 20 Hz high-pass; clipping checked before filtering", null);
       addAudioResult(column, "Zero crossing", stats.zeroCrossingRate.toFixed(3), quality.isNotPureNoise);
       addAudioResult(
         column,
@@ -2641,24 +2697,20 @@
       setAudioColumnState("duplex", "running", "Running");
       setAudioTestState("Testing speaker-only echo suppression");
       const far = generateTestPcm(48000, 3.0, 0.05);
-      const farCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
-      await delay(550);
-      await playWavToDevice(wavBlobFromPcm(far.pcm, far.sampleRate), els.meeryaOutputSelect.value);
-      const farCapture = await farCapturePromise;
+      const farCapture = await captureDuringPlayback(els.meeryaInputSelect.value, 4300, 550,
+        () => playWavToDevice(wavBlobFromPcm(far.pcm, far.sampleRate), els.meeryaOutputSelect.value));
       const core = farCapture.pcm.slice(Math.round(farCapture.sampleRate * 0.8), Math.round(farCapture.sampleRate * 3.2));
       if (core.length < farCapture.sampleRate * 2) throw new Error("Incomplete speaker-only recording");
-      const farStats = analyzePcm(core);
+      const farStats = analyzeCapture({...farCapture, pcm: core});
       const echoSuppressed = farStats.rms < 0.00012;
       addAudioResult("duplex", "Speaker-only microphone return", `${dbfs(farStats.rms).toFixed(1)} dBFS`, echoSuppressed);
       addAudioPlaybackResult("duplex", "Play speaker-only return", wavBlobFromPcm(farCapture.pcm, farCapture.sampleRate));
       await delay(1500);
       setAudioTestState("Testing microphone after playback");
       const near = generateTestPcm(48000, 3.0, 0.72);
-      const nearCapturePromise = capturePcmFromDevice(els.meeryaInputSelect.value, 4300);
-      await delay(550);
-      await playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value);
-      const capture = await nearCapturePromise;
-      const stats = analyzePcm(capture.pcm);
+      const capture = await captureDuringPlayback(els.meeryaInputSelect.value, 4300, 550,
+        () => playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value));
+      const stats = analyzeCapture(capture);
       const waveform = compareWaveforms(near.pcm, capture.pcm, capture.sampleRate);
       const microphoneOpen = stats.rms > 0.00012 && stats.peak > 0.0008 && stats.clippedRatio < 0.01 && waveform.score >= 0.12;
       addAudioResult("duplex", "Microphone after playback", `${dbfs(stats.rms).toFixed(1)} dBFS; stimulus match ${Math.round(waveform.score * 100)}%`, microphoneOpen);
@@ -2698,7 +2750,7 @@
         playWavToDevice(computerWav, els.hostOutputSelect.value),
         playWavToDevice(meeryaWav, els.meeryaOutputSelect.value),
       ]));
-      const stats = analyzePcm(capture.pcm);
+      const stats = analyzeCapture(capture);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
       const computerWaveform = compareWaveforms(computerStimulus.pcm, capture.pcm, capture.sampleRate);
       const computerMagnitude = bandAverageMagnitude(
@@ -2751,7 +2803,7 @@
           playWavToDevice(speechNoiseWav, els.meeryaOutputSelect.value),
           playWavToDevice(speechStimulus.wav, els.hostOutputSelect.value),
         ]));
-        const speechStats = analyzePcm(speechCapture.pcm);
+        const speechStats = analyzeCapture(speechCapture);
         const speechRecording = wavBlobFromPcm(speechCapture.pcm, speechCapture.sampleRate);
         const speechWaveform = compareWaveforms(speechStimulus.pcm, speechCapture.pcm, speechCapture.sampleRate);
         const speechBand = bandAverageMagnitude(
