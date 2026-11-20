@@ -1378,8 +1378,8 @@
 
     function audioReadinessFromDevices(devices) {
       return {
-        hasMeeryaInput: devices.some((device) => device.kind === "audioinput" && isMeeryaDevice(device)),
-        hasMeeryaOutput: devices.some((device) => device.kind === "audiooutput" && isMeeryaDevice(device)),
+        hasMeeryaInput: devices.some((device) => device.kind === "audioinput" && !["default", "communications"].includes(device.deviceId) && isMeeryaDevice(device)),
+        hasMeeryaOutput: devices.some((device) => device.kind === "audiooutput" && !["default", "communications"].includes(device.deviceId) && isMeeryaDevice(device)),
         hasHostInput: devices.some((device) => device.kind === "audioinput" && !isMeeryaDevice(device)),
         hasHostOutput: devices.some((device) => device.kind === "audiooutput" && !isMeeryaDevice(device)),
       };
@@ -1722,7 +1722,9 @@
       return {
         panelState: els.audioTestPanel.dataset.state || "",
         stateText: els.audioTestState.textContent.trim(),
-        pass: els.audioTestPanel.dataset.state === "pass"
+        pass: selectedMeeryaEndpoint(els.meeryaInputSelect)
+          && selectedMeeryaEndpoint(els.meeryaOutputSelect)
+          && els.audioTestPanel.dataset.state === "pass"
           && rows.some((row) => row.result === "pass")
           && rows.every((row) => row.result !== "fail"),
         rows,
@@ -1791,10 +1793,42 @@
 
     function isMeeryaDevice(device) {
       const label = deviceLabel(device).trim();
-      // macOS CoreAudio can expose USB UAC endpoints using their USB interface
-      // names alone ("microphone" and "speaker").
-      if (/meerya|uac1|esp32|303a:8007/i.test(label)) return true;
-      return /^(microphone|speaker)$/i.test(label);
+      return /meerya/i.test(label);
+    }
+
+    function audioRouteKey() {
+      return JSON.stringify([state.audioRouteRevision || 0, ...audioDeviceSelects().map(select => [select.value, selectedOptionLabel(select)])]);
+    }
+
+    function audioDeviceSelects() {
+      return [els.hostOutputSelect, els.meeryaInputSelect, els.meeryaOutputSelect, els.hostInputSelect];
+    }
+
+    function selectedMeeryaEndpoint(select) {
+      return Boolean(select.value && !["default", "communications"].includes(select.value)
+        && isMeeryaDevice({label: selectedOptionLabel(select)}));
+    }
+
+    function invalidateAudioRoutes() {
+      state.audioRouteRevision = (state.audioRouteRevision || 0) + 1;
+      clearAudioResults();
+      state.audioSuiteSteps = [];
+      state.captureSettings = null;
+      state.micDiagnostics = {status: "not-run", reason: "Audio devices changed; run the test again."};
+      document.getElementById("micSlotsResult").textContent = "Audio devices changed; run microphone-channel diagnostics again.";
+      document.getElementById("audioSuiteSummary").textContent = "Audio devices changed; run the test again.";
+      setAudioPanelState("review");
+      setAudioTestState("Audio devices changed; test again");
+    }
+
+    function requireMeeryaRoutes(expectedKey = audioRouteKey()) {
+      if (expectedKey !== audioRouteKey()
+          || !selectedMeeryaEndpoint(els.meeryaInputSelect)
+          || !selectedMeeryaEndpoint(els.meeryaOutputSelect)) {
+        invalidateAudioRoutes();
+        throw new Error("Select explicitly named Meerya microphone and speaker devices, then run the test again. Default and unidentified devices cannot verify Meerya.");
+      }
+      return expectedKey;
     }
 
     function scoreHostDevice(device) {
@@ -1815,7 +1849,9 @@
 
     function populateDeviceSelect(select, devices, kind, selectedDeviceId) {
       select.innerHTML = "";
-      const matching = devices.filter((device) => device.kind === kind);
+      const matching = devices.filter((device) => device.kind === kind
+        && (![els.meeryaInputSelect, els.meeryaOutputSelect].includes(select)
+          || (isMeeryaDevice(device) && !["default", "communications"].includes(device.deviceId))));
       if (matching.length === 0) {
         const option = document.createElement("option");
         option.value = "";
@@ -1850,6 +1886,7 @@
       });
       permissionStream.getTracks().forEach((track) => track.stop());
 
+      const previousRoutes = audioRouteKey();
       const devices = await navigator.mediaDevices.enumerateDevices();
       const readiness = audioReadinessFromDevices(devices);
       const hostOutput = pickDevice(devices, "audiooutput", scoreHostDevice);
@@ -1861,6 +1898,7 @@
       populateDeviceSelect(els.meeryaInputSelect, devices, "audioinput", meeryaInput);
       populateDeviceSelect(els.meeryaOutputSelect, devices, "audiooutput", meeryaOutput);
       populateDeviceSelect(els.hostInputSelect, devices, "audioinput", hostInput);
+      if (audioRouteKey() !== previousRoutes) invalidateAudioRoutes();
       setAudioTestControls(readiness);
       state.meeryaAudioReady = readiness.hasMeeryaInput && readiness.hasMeeryaOutput;
       updateFlashControls();
@@ -1916,6 +1954,7 @@
       }
       let timer = null;
       navigator.mediaDevices.addEventListener("devicechange", () => {
+        invalidateAudioRoutes();
         clearTimeout(timer);
         timer = setTimeout(() => autoPopulateAudioDevices(), 500);
       });
@@ -2312,6 +2351,10 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         track = stream.getAudioTracks()[0];
+        if (inputDeviceId === els.meeryaInputSelect.value
+            && (!isMeeryaDevice({label: track.label}) || track.getSettings().deviceId !== inputDeviceId)) {
+          throw new Error("The opened microphone is not the selected Meerya device. Refresh Devices and test again.");
+        }
         logMicrophoneTrack(track, "opened");
         track.onmute = () => logMicrophoneTrack(track, "mute event");
         track.onunmute = () => logMicrophoneTrack(track, "unmute event");
@@ -2609,6 +2652,7 @@
       readiness = null,
     }) {
       readiness ??= await refreshAudioDevices();
+      const routeKey = requireMeeryaRoutes();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running smoke tests.");
       }
@@ -2631,6 +2675,7 @@
       const waveform = compareWaveforms(pcm, capture.pcm, capture.sampleRate);
       const rmsDb = 20 * Math.log10(Math.max(stats.rms, 1e-6));
       const peakDb = 20 * Math.log10(Math.max(stats.peak, 1e-6));
+      requireMeeryaRoutes(routeKey);
       const quality = audioCapturePass(stats, waveform);
       addAudioResult(column, "RMS", `${rmsDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
       addAudioResult(column, "Peak", `${peakDb.toFixed(1)} dBFS`, quality.hasAudibleSignal);
@@ -2689,6 +2734,7 @@
     }
 
     async function runAudioHalfDuplexTest({ clear = true } = {}) {
+      const routeKey = requireMeeryaRoutes();
       if (!els.hostOutputSelect.value || !els.meeryaOutputSelect.value || !els.meeryaInputSelect.value) {
         throw new Error("Half-duplex test needs computer speaker, Meerya speaker, and Meerya microphone.");
       }
@@ -2701,6 +2747,7 @@
         () => playWavToDevice(wavBlobFromPcm(far.pcm, far.sampleRate), els.meeryaOutputSelect.value));
       const core = farCapture.pcm.slice(Math.round(farCapture.sampleRate * 0.8), Math.round(farCapture.sampleRate * 3.2));
       if (core.length < farCapture.sampleRate * 2) throw new Error("Incomplete speaker-only recording");
+      requireMeeryaRoutes(routeKey);
       const farStats = analyzeCapture({...farCapture, pcm: core});
       const echoSuppressed = farStats.rms < 0.00012;
       addAudioResult("duplex", "Speaker-only microphone return", `${dbfs(farStats.rms).toFixed(1)} dBFS`, echoSuppressed);
@@ -2712,6 +2759,7 @@
         () => playWavToDevice(wavBlobFromPcm(near.pcm, near.sampleRate), els.hostOutputSelect.value));
       const stats = analyzeCapture(capture);
       const waveform = compareWaveforms(near.pcm, capture.pcm, capture.sampleRate);
+      requireMeeryaRoutes(routeKey);
       const microphoneOpen = stats.rms > 0.00012 && stats.peak > 0.0008 && stats.clippedRatio < 0.01 && waveform.score >= 0.12;
       addAudioResult("duplex", "Microphone after playback", `${dbfs(stats.rms).toFixed(1)} dBFS; stimulus match ${Math.round(waveform.score * 100)}%`, microphoneOpen);
       addAudioResult("duplex", "Conversation mode", "Take turns; microphone reopens about one second after speaker playback", null);
@@ -2727,6 +2775,7 @@
     async function runAudioDuplexTest({ clear = true, readiness = null } = {}) {
       if (expectedAudio()?.halfDuplexEchoSuppression) return runAudioHalfDuplexTest({ clear });
       readiness ??= await refreshAudioDevices();
+      const routeKey = requireMeeryaRoutes();
       if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
         throw new Error("Meerya must appear as both an audio input and output before running the duplex test.");
       }
@@ -2752,6 +2801,7 @@
       ]));
       const stats = analyzeCapture(capture);
       const recording = wavBlobFromPcm(capture.pcm, capture.sampleRate);
+      requireMeeryaRoutes(routeKey);
       const computerWaveform = compareWaveforms(computerStimulus.pcm, capture.pcm, capture.sampleRate);
       const computerMagnitude = bandAverageMagnitude(
         capture.pcm,
@@ -2850,6 +2900,7 @@
         addAudioResult("duplex", "Computer speech B", `speech test skipped: ${error.message}`, null);
         appendLog(`Audio speech test skipped: ${error.message}\n`);
       }
+      requireMeeryaRoutes(routeKey);
       const overallPass = pass && speechAvailable && speechPass;
       const incomplete = pass && !speechAvailable;
       setAudioColumnState("duplex", overallPass ? "pass" : incomplete ? "review" : "fail", overallPass ? "Passed" : incomplete ? "Speech not completed" : "Check");
@@ -2892,6 +2943,7 @@
       try {
         clearAudioResults();
         const readiness = await refreshAudioDevices();
+        const suiteRouteKey = requireMeeryaRoutes();
         if (!readiness.hasMeeryaInput || !readiness.hasMeeryaOutput) {
           throw new Error(audioReadinessLabel(readiness));
         }
@@ -2953,6 +3005,7 @@
           diagnosticStep.error = "Connect microphone diagnostics to check individual channels.";
           appendLog("Three-microphone raw-channel test skipped: optional CDC diagnostics are not connected.\n");
         }
+        requireMeeryaRoutes(suiteRouteKey);
         const measuredFailure = state.audioSuiteSteps.some(step => step.status === "failed");
         const pass = audioPass && diagnosticStep.status === "passed";
         const verdict = pass ? "Meerya passed"
@@ -3713,6 +3766,7 @@
     els.flashBtn.addEventListener("click", () => flash().catch(handleError));
     els.disconnectBtn.addEventListener("click", () => disconnect().catch(handleError));
     els.copyStatusBtn.addEventListener("click", () => copyLatestFirmwareStatus().catch(handleError));
+    audioDeviceSelects().forEach(select => select.addEventListener("change", invalidateAudioRoutes));
     els.audioRefreshBtn.addEventListener("click", () => refreshAudioDevices().catch(handleError));
     els.audioHostToMeeryaBtn.addEventListener("click", () => runAudioPathTest({
       label: "Computer to Meerya mic",
